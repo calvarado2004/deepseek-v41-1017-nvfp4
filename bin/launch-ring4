@@ -83,6 +83,9 @@ LOAD_FORMAT="${DSV41K_LOAD_FORMAT:-auto}"
 KV_CACHE_MEMORY_BYTES="${DSV41K_KV_CACHE_MEMORY_BYTES:-}"
 # Staging buffer share of free memory; must hold the largest tensor (~1 GiB).
 IT_MAX_FREE_MEM="${DSV41K_INSTANTTENSOR_MAX_FREE_MEM_USAGE:-0.8}"
+# 0: each rank reads its own local copy (no NCCL). The distributed load
+# segfaulted on every rank here (2026-10-20, ring + preloaded NCCL).
+IT_DISTRIBUTED="${DSV41K_INSTANTTENSOR_DISTRIBUTED:-0}"
 # The 1017 model card's sampling, for requests that do not set their own.
 # At 0.6/0.95 the reasoning loops far more often (RSU prompt, 2026-10-19).
 GENERATION_OVERRIDE="${DSV41K_GENERATION_OVERRIDE:-{\"temperature\": 1.0, \"top_p\": 1.0}}"
@@ -167,6 +170,7 @@ envs=(
   -e VLLM_ONE_GPU_PER_NODE=1
   -e PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
   -e "INSTANTTENSOR_MAX_FREE_MEM_USAGE=$IT_MAX_FREE_MEM"
+  -e "VLLM_INSTANTTENSOR_DISTRIBUTED=$IT_DISTRIBUTED"
   # 0001: copy each tensor out of the MAP_PRIVATE mapping on load; without it
   # the fused-MoE loaders turn file pages into ~27 GiB of anonymous memory per
   # rank (tonyd2wild's NVFP4 boots all died of it).

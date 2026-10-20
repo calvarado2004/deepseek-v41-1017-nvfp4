@@ -17,9 +17,13 @@ speculative decoding, and the model card's official sampling.
 | Code decode, 4 streams (aggregate) | 115–127 tok/s |
 | Prefill, 32K-token prompt | 3,655 tok/s |
 | 943K-token prompt, needle found | 263 s |
-| KV pool | 2,940,757 tokens (2.8× a 1M request) |
+| KV pool | 2,508,566 tokens (2.4× a 1M request; 8 GiB pin) |
 | Weights per rank | 77.8 GiB, Engram tables (97 GiB) stay on NVMe |
+| **Boot, unit start to ready** | **191 s** (weights load in 69 s per rank with InstantTensor) |
 | Free memory on the head after a 943K prompt | ~8 GiB |
+
+Measured with the optional arx all-reduce on (`DSV41K_ARX=1`, see below); the
+defaults here leave it off, which costs about 3% of decode speed.
 
 Quality gates on every change: count-to-100 exact 3/3, 50/52 on a 44-image +
 8-clip vision probe, needles found at 517K and 943K tokens.
@@ -47,7 +51,8 @@ Quality gates on every change: count-to-100 exact 3/3, 50/52 on a 44-image +
 | Indexer K cache | **MXFP4** | +40% KV pool, −16% time on a 943K prompt |
 | Speculative decoding | DSpark, **7 drafts, probabilistic, block verification**, draft context window 32K | best at temperature 1.0 |
 | Collectives | **ondigo-winder's switchless 4-HCA NCCL** (built by `scripts/build-nccl-4hca.sh`) | prefill +15%, decode step −6% vs stock NCCL |
-| Optional | arx RDMA all-reduce (kindling), InstantTensor weight load | see below |
+| Weight load | **InstantTensor**, local per rank (patch 0010), KV pool pinned | boot ~8 min → 191 s |
+| Optional | arx RDMA all-reduce (kindling) | see below |
 | Sampling | temperature 1.0 / top_p 1.0 **enforced** + thinking budget (`overlay/dsv41_sampling_policy.py`) | stops the V4.1 reasoning loop |
 | Video | `overlay/dsv41_video_frames.py`: `video_url` parts become timestamped JPEG frames | V4.1 has a vision tower but no video token |
 
@@ -65,6 +70,7 @@ Quality gates on every change: count-to-100 exact 3/3, 50/52 on a 44-image +
 | Patches 0005–0009 + draft context window 32K | draft acceptance 4.1–4.3 → 4.4–4.7 |
 | MXFP4 indexer | KV 2.29M → 3.21M tokens, 943K prompt 312 → 263 s |
 | 7 drafts | code 1 stream +8%, prose unchanged, KV −8% |
+| InstantTensor, local per rank, KV pinned at 8 GiB | model load 328 → 69 s, boot ~8 min → 191 s; speed and gates unchanged |
 
 ### What did not work on GB10
 
@@ -111,7 +117,7 @@ thinking request sends none: low 4,096 · high 8,192 · xhigh 16,384 · max
    `DSV41K_SSL_CERTFILE`/`DSV41K_SSL_KEYFILE`.
 6. **Start** ranks 1–3, then rank 0:
    `sudo systemctl start spark-llm-deepseek-v41-1017@{1,2,3}` and `…@0`.
-   Rank 0 reports ready when `/health` answers. First boot ~8 minutes.
+   Rank 0 reports ready when `/health` answers, about 3 minutes later.
 7. **Test** on the head: `tests/gates.sh` (uses our probe scripts; adapt the
    paths).
 
@@ -127,11 +133,11 @@ put your changes in `deepseek-v41-1017.env`, not on the nodes.
   of its code: `scripts/build-arx-overlay.sh` assembles the overlay on your
   nodes from a kindling checkout (we used `0d1f462`) and its image. Gain:
   decode step −3%, KV pool +24%.
-- **InstantTensor** (`DSV41K_LOAD_FORMAT=instanttensor`, patch 0010):
-  direct-I/O weight load, ~5× faster on other cards; the Engram shards stay on
-  the placeholder path. It keeps ~4 GB per rank, so pin the KV pool with
-  `DSV41K_KV_CACHE_MEMORY_BYTES`. **Experimental: not yet measured on this
-  card.**
+- **Stock loader** (`DSV41K_LOAD_FORMAT=auto`, and remove
+  `DSV41K_KV_CACHE_MEMORY_BYTES`): if InstantTensor misbehaves on your nodes.
+  InstantTensor's own distributed mode (`DSV41K_INSTANTTENSOR_DISTRIBUTED=1`)
+  segfaulted on every rank here: it hands the raw NCCL communicator of the
+  preloaded ring NCCL to its extension, so the recipe loads locally.
 - **Text only** (`DSV41K_LANGUAGE_MODEL_ONLY=1`): ondigo-winder's original shape.
 
 ## Repository layout

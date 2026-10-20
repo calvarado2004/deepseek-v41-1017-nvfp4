@@ -1,7 +1,16 @@
 diff --git a/vllm/model_executor/model_loader/weight_utils.py b/vllm/model_executor/model_loader/weight_utils.py
 --- a/vllm/model_executor/model_loader/weight_utils.py
 +++ b/vllm/model_executor/model_loader/weight_utils.py
-@@ -1394,6 +1394,19 @@
+@@ -1391,9 +1391,28 @@
+         process_group = None
+     else:
+         process_group = world_group.device_group if world_group.world_size > 1 else None
++    # VLLM_INSTANTTENSOR_DISTRIBUTED=0: every rank reads its own local copy of
++    # the checkpoint, with no NCCL. InstantTensor's distributed load hands the
++    # raw ncclComm_t of vLLM's device group to its extension; on a ring with a
++    # preloaded NCCL that segfaulted on every rank at the first collective.
++    if os.environ.get("VLLM_INSTANTTENSOR_DISTRIBUTED", "1") == "0":
++        process_group = None
  
      device = current_platform.current_device()
  

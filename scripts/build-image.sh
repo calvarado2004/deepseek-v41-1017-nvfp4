@@ -40,7 +40,7 @@ assert 'is_device_capability_family(120)' in src('vllm.utils.deep_gemm'), '0005 
 assert 'draft_context_window' in src('vllm.config.speculative'), '0006 missing'
 assert '_is_bonus_logit(' in src('vllm.v1.worker.gpu.spec_decode.rejection_sampler_utils').split('def _compute_local_residual_mass_kernel')[1], '0008 missing'
 assert 'DeepseekV41Renderer' in src('vllm.renderers.deepseek_v4') and 'image_order' in src('vllm.tokenizers.deepseek_v41_encoding'), '0009 missing'
-assert 'placeholder_files' in src('vllm.model_executor.model_loader.weight_utils'), '0010 missing'
+assert 'VLLM_INSTANTTENSOR_DISTRIBUTED' in src('vllm.model_executor.model_loader.weight_utils'), '0010 missing'
 print('vllm', vllm.__version__, 'disk_offload', c.disk_offload)\"
       echo \"$h \$(docker image inspect -f '{{.Id}}' $DSV41K_IMAGE)\""
   ) 2>&1 | sed "s/^/[$h] /" &
