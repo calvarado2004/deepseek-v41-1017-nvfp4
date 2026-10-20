@@ -14,6 +14,7 @@ speculative decoding, and the model card's official sampling.
 |---|---:|
 | Code decode, 1 stream | **65–67 tok/s** |
 | Chat prose decode, 1 stream | 29–43 tok/s |
+| One long Max-effort request (111,840 tokens) | 46.5 tok/s average; ~80 tok/s while writing code |
 | Code decode, 4 streams (aggregate) | 115–127 tok/s |
 | Prefill, 32K-token prompt | 3,655 tok/s |
 | 943K-token prompt, needle found | 263 s |
@@ -27,6 +28,34 @@ defaults here leave it off, which costs about 3% of decode speed.
 
 Quality gates on every change: count-to-100 exact 3/3, 50/52 on a 44-image +
 8-clip vision probe, needles found at 517K and 943K tokens.
+
+## Real work: one prompt, one shot
+
+<p align="center">
+  <img src="assets/gummy-bears-demo.gif" alt="Gummy Bears, generated in one shot" width="760">
+</p>
+
+A single request: a long spec for a soft-body **"Gummy Bears"** toy in three.js
+(metaball bears, gummy material, volume-preserving jelly physics, an editorial
+product page), reasoning effort **Max**. The model thought for about 36
+minutes and then wrote a 2,025-line page that runs as is —
+[`examples/gummy-bears/`](examples/gummy-bears/) has the prompt, the
+untouched HTML and a 45-second recording.
+
+| One request, 510-token prompt | |
+|---|---:|
+| Generated | **111,840 tokens in 40 min — 46.5 tok/s average** |
+| Reasoning phase (DSpark acceptance length ~3.3) | ~42.5 tok/s |
+| Code phase (acceptance length ~6.6 of 7 drafts) | **~80 tok/s, peaks at 92** |
+
+<p align="center">
+  <img src="assets/chat-gummy-bears.jpg" alt="The chat with the run's statistics" width="49%">
+  <img src="assets/dashboard-code-phase.jpg" alt="vLLM metrics during the code phase: 83 tok/s, acceptance length 6.95" width="49%">
+</p>
+
+Free reasoning at temperature 1.0 is hard to predict, so the drafter helps
+least there; code is where 7 drafts pay off (per-position acceptance 98% →
+62% above).
 
 ## Hardware
 
@@ -149,6 +178,7 @@ overlay/                    the two vLLM --middleware modules
 scripts/                    fetch, build-image, build-nccl-4hca, build-arx-overlay, stage
 systemd/                    the Type=notify unit (no [Install]: never start at boot)
 tests/gates.sh              first-boot gates
+examples/gummy-bears/       a one-shot run: prompt, untouched output, recording
 cluster.env                 your nodes
 deepseek-v41-1017.env       every knob, with the measured reason for its value
 pins.env                    checkpoint revision, base image digest, patch checksums

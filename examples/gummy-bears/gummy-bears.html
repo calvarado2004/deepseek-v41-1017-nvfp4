@@ -1,0 +1,2025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Gummy Bears.</title>
+<style>
+  :root{
+    --ink:#111110;
+    --muted:#77746d;
+    --paper:#fbfaf7;
+    --line:rgba(17,17,16,.09);
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    width:100%;height:100%;margin:0;overflow:hidden;
+    background:var(--paper);color:var(--ink);
+  }
+  body{
+    font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    cursor:none;
+  }
+  #c{
+    position:fixed;inset:0;width:100%;height:100%;display:block;
+    touch-action:none;outline:none;
+  }
+  #brand{
+    position:fixed;left:clamp(22px,5vw,78px);top:clamp(24px,7vh,78px);
+    z-index:3;pointer-events:none;user-select:none;
+    animation:rise .9s cubic-bezier(.2,.8,.2,1) both;
+  }
+  #brand h1{
+    margin:0;font-family:"Times New Roman",Times,Georgia,serif;
+    font-weight:400;font-size:clamp(68px,10vw,158px);line-height:.77;
+    letter-spacing:-.068em;color:#111;
+  }
+  #brand h1 .slash{
+    display:inline-block;font-style:italic;font-weight:300;
+    opacity:.28;margin-left:.02em;
+  }
+  #brand h1 em{
+    display:block;font-style:italic;padding-left:.54em;font-weight:400;
+  }
+  #brand p{
+    margin:26px 0 0;max-width:310px;color:#66635c;
+    font-size:11px;line-height:1.6;letter-spacing:.015em;
+  }
+  #card{
+    position:fixed;right:clamp(16px,4vw,48px);top:clamp(18px,8vh,82px);
+    width:min(286px,calc(100vw - 32px));
+    padding:19px 19px 15px;z-index:4;
+    background:rgba(255,255,255,.74);
+    border:1px solid var(--line);border-radius:19px;
+    box-shadow:0 24px 70px rgba(20,18,14,.09),0 2px 10px rgba(20,18,14,.035);
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    animation:rise .9s .08s cubic-bezier(.2,.8,.2,1) both;
+  }
+  .card-label{
+    color:#858179;font-size:9px;text-transform:uppercase;
+    letter-spacing:.16em;line-height:1;
+  }
+  #swatches{
+    display:flex;gap:10px;margin:13px 0 23px;align-items:center;
+  }
+  .swatch{
+    width:27px;height:27px;padding:0;border:0;border-radius:50%;
+    cursor:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08),0 2px 6px rgba(0,0,0,.08);
+    transition:transform .18s ease,box-shadow .18s ease;
+    -webkit-appearance:none;appearance:none;
+  }
+  .swatch:hover{transform:scale(1.1);}
+  .swatch.active{
+    transform:scale(1.18);
+    box-shadow:0 0 0 2px #111,inset 0 0 0 1px rgba(255,255,255,.35);
+  }
+  .control-row{margin-top:2px;}
+  .control-label{
+    display:flex;justify-content:space-between;align-items:center;
+    color:#6e6a62;font-size:9px;text-transform:uppercase;letter-spacing:.14em;
+    margin-bottom:11px;
+  }
+  .control-label b{font-weight:500;color:#2d2b27;font-variant-numeric:tabular-nums;}
+  input[type="range"]{
+    width:100%;height:20px;margin:0;background:transparent;
+    -webkit-appearance:none;appearance:none;cursor:none;
+  }
+  input[type="range"]::-webkit-slider-runnable-track{
+    height:1px;background:rgba(17,17,16,.19);
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;
+    width:13px;height:13px;border-radius:50%;background:#111;
+    margin-top:-6px;box-shadow:0 1px 4px rgba(0,0,0,.18);
+  }
+  input[type="range"]::-moz-range-track{
+    height:1px;background:rgba(17,17,16,.19);
+  }
+  input[type="range"]::-moz-range-thumb{
+    width:13px;height:13px;border:0;border-radius:50%;background:#111;
+    box-shadow:0 1px 4px rgba(0,0,0,.18);
+  }
+  .metrics{
+    display:grid;grid-template-columns:1fr 1fr;gap:12px;
+    margin:21px 0 18px;padding-top:16px;border-top:1px solid var(--line);
+  }
+  .metrics span{
+    display:block;color:#89857d;font-size:8.5px;text-transform:uppercase;
+    letter-spacing:.15em;margin-bottom:6px;
+  }
+  .metrics b{
+    display:block;font-weight:400;font-size:22px;line-height:1;
+    letter-spacing:-.045em;font-variant-numeric:tabular-nums;
+  }
+  #pour{
+    width:100%;height:45px;border:0;border-radius:999px;background:#111;
+    color:#fff;display:flex;align-items:center;justify-content:space-between;
+    padding:0 7px 0 17px;font-size:10px;letter-spacing:.03em;
+    cursor:none;transition:background .18s ease,transform .18s ease;
+    -webkit-appearance:none;appearance:none;
+  }
+  #pour:hover{background:#292926;transform:translateY(-1px);}
+  #pour .arrow{
+    width:31px;height:31px;border-radius:50%;display:grid;place-items:center;
+    background:rgba(255,255,255,.13);font-size:16px;line-height:1;
+  }
+  .footnote{
+    margin:13px 2px 0;color:#918d85;font-size:9px;line-height:1.45;
+    letter-spacing:.01em;
+  }
+  #cursor{
+    position:fixed;left:-100px;top:-100px;width:18px;height:18px;
+    border:1px solid rgba(17,17,16,.62);border-radius:50%;
+    transform:translate(-50%,-50%);pointer-events:none;z-index:100;
+    mix-blend-mode:multiply;transition:
+      width .18s ease,height .18s ease,background .18s ease,
+      border-color .18s ease,opacity .18s ease;
+  }
+  body.grabbing #cursor{
+    width:40px;height:40px;
+    background:rgba(17,17,16,.035);
+    border-color:rgba(17,17,16,.34);
+  }
+  @keyframes rise{
+    from{opacity:0;transform:translateY(14px);}
+    to{opacity:1;transform:translateY(0);}
+  }
+  @media (max-width: 760px){
+    #brand{left:20px;top:23px;}
+    #brand h1{font-size:clamp(58px,18vw,112px);}
+    #brand p{display:none;}
+    #card{
+      left:14px;right:14px;bottom:14px;top:auto;width:auto;
+      padding:14px 15px 13px;border-radius:17px;
+    }
+    #swatches{margin:9px 0 13px;}
+    .metrics{margin:14px 0 13px;padding-top:13px;}
+    .footnote{display:none;}
+    #pour{height:43px;}
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="brand">
+  <h1>Gummy <span class="slash">/</span><em>Bears.</em></h1>
+  <p>A soft-body study in sugar, tension and restraint. Grab a bear, pull it until it wobbles, then let go.</p>
+</div>
+
+<aside id="card">
+  <div class="card-label">Flavors</div>
+  <div id="swatches"></div>
+
+  <div class="control-row">
+    <div class="control-label">
+      <span>Wobble</span><b id="wobbleValue">72</b>
+    </div>
+    <input id="wobble" type="range" min="0" max="100" value="72" aria-label="Wobble" />
+  </div>
+
+  <div class="metrics">
+    <div><span>Stretch</span><b id="stretchReadout">1.00×</b></div>
+    <div><span>Bounces</span><b id="bounceReadout">0</b></div>
+  </div>
+
+  <button id="pour" type="button">
+    <span>Pour more bears</span><span class="arrow">↓</span>
+  </button>
+  <p class="footnote">Drag any part to stretch. Throw a bear to knock the pile around.</p>
+</aside>
+
+<div id="cursor"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+/* ------------------------------------------------------------------------- */
+/*  Constants                                                                */
+/* ------------------------------------------------------------------------- */
+
+const H = 1 / 90;
+const GRAVITY = 20;
+const MAX_INF = 5;
+const MAX_BEARS = 12;
+
+let softness = 0.72;
+let totalBounces = 0;
+let selectedFlavor = -1;
+
+const FLAVORS = [
+  { name:'Cherry',     color:0xd91f3d, attenuation:0xa5001d, dist:0.40, css:'#d52042', shadow:0xd52042 },
+  { name:'Tangerine',  color:0xff7a18, attenuation:0xdf4000, dist:0.43, css:'#ff7a18', shadow:0xff7a18 },
+  { name:'Lemon',      color:0xffd72a, attenuation:0xdaa900, dist:0.38, css:'#ffd72a', shadow:0xf1c218 },
+  { name:'Apple',      color:0x6bd52a, attenuation:0x2e9700, dist:0.42, css:'#6bd52a', shadow:0x65cf24 },
+  { name:'Pineapple',  color:0xfff6d7, attenuation:0xffdc7a, dist:0.82, css:'#fff2c8', shadow:0xe8d38a }
+];
+
+const BEAR_POINTS = [
+  new THREE.Vector3( 0.00, 0.64, 0.02), // 0 body
+  new THREE.Vector3( 0.00, 1.42, 0.02), // 1 head
+  new THREE.Vector3( 0.00, 1.08, 0.02), // 2 neck
+  new THREE.Vector3(-0.30, 1.73, 0.04), // 3 ear L
+  new THREE.Vector3( 0.30, 1.73, 0.04), // 4 ear R
+  new THREE.Vector3( 0.00, 1.34, 0.38), // 5 snout
+  new THREE.Vector3(-0.64, 0.75, 0.10), // 6 hand L
+  new THREE.Vector3( 0.64, 0.75, 0.10), // 7 hand R
+  new THREE.Vector3(-0.29, 0.18, 0.16), // 8 foot L
+  new THREE.Vector3( 0.29, 0.18, 0.16), // 9 foot R
+  new THREE.Vector3( 0.00, 0.42, 0.10)  // 10 belly
+];
+
+const POINT_MASS = [1.00,0.80,0.26,0.06,0.06,0.13,0.13,0.13,0.19,0.19,0.55];
+
+const FLOOR_RADIUS = [
+  0.26,0.25,0.14,0.07,0.07,0.10,0.10,0.10,0.18,0.18,0.22
+];
+
+const COLLIDE_RADIUS = [
+  0.58,0.43,0.28,0.14,0.14,0.17,0.18,0.18,0.23,0.23,0.50
+];
+
+const INFLUENCE = [
+  0.55,0.42,0.30,0.18,0.18,0.23,0.22,0.22,0.25,0.25,0.50
+];
+
+const EDGE_DEFS = [
+  [0, 2, 0.30],
+  [2, 1, 0.27],
+  [1, 3, 0.44],
+  [1, 4, 0.44],
+  [1, 5, 0.34],
+  [0, 6, 0.15],
+  [0, 7, 0.15],
+  [10, 8, 0.20],
+  [10, 9, 0.20],
+  [0, 10, 0.48]
+];
+
+const STRETCH_PAIRS = [
+  [0, 2], [2, 1], [0, 6], [0, 7], [10, 8], [10, 9], [1, 10]
+];
+
+/* ------------------------------------------------------------------------- */
+/*  Small matrix / vector helpers                                            */
+/* ------------------------------------------------------------------------- */
+
+function mul3(a, b) {
+  return [
+    a[0]*b[0] + a[1]*b[3] + a[2]*b[6],
+    a[0]*b[1] + a[1]*b[4] + a[2]*b[7],
+    a[0]*b[2] + a[1]*b[5] + a[2]*b[8],
+
+    a[3]*b[0] + a[4]*b[3] + a[5]*b[6],
+    a[3]*b[1] + a[4]*b[4] + a[5]*b[7],
+    a[3]*b[2] + a[4]*b[5] + a[5]*b[8],
+
+    a[6]*b[0] + a[7]*b[3] + a[8]*b[6],
+    a[6]*b[1] + a[7]*b[4] + a[8]*b[7],
+    a[6]*b[2] + a[7]*b[5] + a[8]*b[8]
+  ];
+}
+
+function det3(m) {
+  return (
+    m[0] * (m[4] * m[8] - m[5] * m[7]) -
+    m[1] * (m[3] * m[8] - m[5] * m[6]) +
+    m[2] * (m[3] * m[7] - m[4] * m[6])
+  );
+}
+
+function invert3(m) {
+  const a = m[0], b = m[1], c = m[2];
+  const d = m[3], e = m[4], f = m[5];
+  const g = m[6], h = m[7], i = m[8];
+
+  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  if (Math.abs(det) < 1e-10) return null;
+
+  const id = 1 / det;
+  return [
+    (e * i - f * h) * id,
+    (c * h - b * i) * id,
+    (b * f - c * e) * id,
+
+    (f * g - d * i) * id,
+    (a * i - c * g) * id,
+    (c * d - a * f) * id,
+
+    (d * h - e * g) * id,
+    (b * g - a * h) * id,
+    (a * e - b * d) * id
+  ];
+}
+
+function inverseTranspose3(m) {
+  const inv = invert3(m);
+  if (!inv) return null;
+  return [
+    inv[0], inv[3], inv[6],
+    inv[1], inv[4], inv[7],
+    inv[2], inv[5], inv[8]
+  ];
+}
+
+function polarDecomp(m) {
+  let r = m.slice();
+
+  for (let it = 0; it < 10; it++) {
+    const invT = inverseTranspose3(r);
+    if (!invT) break;
+
+    for (let k = 0; k < 9; k++) {
+      r[k] = 0.5 * (r[k] + invT[k]);
+    }
+  }
+
+  let d = det3(r);
+  if (d < 0) {
+    for (let k = 0; k < 9; k++) r[k] *= -1;
+  }
+
+  if (!Number.isFinite(r[0]) || Math.abs(det3(r)) < 1e-8) {
+    return [1,0,0,0,1,0,0,0,1];
+  }
+
+  return r;
+}
+
+/* ------------------------------------------------------------------------- */
+/*  The bear is generated as one implicit surface with marching tetrahedra   */
+/* ------------------------------------------------------------------------- */
+
+function smin(a, b, k) {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - h * h * k * 0.25;
+}
+
+function smax(a, b, k) {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.max(a, b) + h * h * k * 0.25;
+}
+
+function sdSphere(px, py, pz, cx, cy, cz, r) {
+  const x = px - cx, y = py - cy, z = pz - cz;
+  return Math.sqrt(x*x + y*y + z*z) - r;
+}
+
+function sdEllipsoid(px, py, pz, cx, cy, cz, rx, ry, rz) {
+  const x = (px - cx) / rx;
+  const y = (py - cy) / ry;
+  const z = (pz - cz) / rz;
+  return (Math.sqrt(x*x + y*y + z*z) - 1) * Math.min(rx, ry, rz);
+}
+
+function sdCapsule(px, py, pz, ax, ay, az, bx, by, bz, r) {
+  const pax = px - ax, pay = py - ay, paz = pz - az;
+  const bax = bx - ax, bay = by - ay, baz = bz - az;
+  const ba2 = bax*bax + bay*bay + baz*baz;
+  let h = (pax*bax + pay*bay + paz*baz) / ba2;
+  h = Math.max(0, Math.min(1, h));
+  const dx = px - (ax + bax*h);
+  const dy = py - (ay + bay*h);
+  const dz = pz - (az + baz*h);
+  return Math.sqrt(dx*dx + dy*dy + dz*dz) - r;
+}
+
+function sdf(px, py, pz) {
+  let d = sdEllipsoid(px, py, pz, 0, 0.64, 0.02, 0.53, 0.60, 0.43);
+
+  d = smin(d, sdEllipsoid(px, py, pz, 0, 0.42, 0.09, 0.58, 0.38, 0.50), 0.09);
+  d = smin(d, sdEllipsoid(px, py, pz, 0, 1.08, 0.02, 0.28, 0.22, 0.27), 0.08);
+  d = smin(d, sdEllipsoid(px, py, pz, 0, 1.42, 0.02, 0.41, 0.39, 0.37), 0.09);
+  d = smin(d, sdEllipsoid(px, py, pz, 0, 1.33, 0.34, 0.21, 0.15, 0.18), 0.05);
+
+  d = smin(d, sdSphere(px, py, pz, -0.30, 1.73, 0.04, 0.155), 0.045);
+  d = smin(d, sdSphere(px, py, pz,  0.30, 1.73, 0.04, 0.155), 0.045);
+
+  d = smin(d, sdSphere(px, py, pz, 0, 1.34, 0.485, 0.045), 0.028);
+
+  d = smin(d, sdCapsule(px, py, pz, -0.40, 0.83, 0.03, -0.64, 0.74, 0.11, 0.15), 0.065);
+  d = smin(d, sdEllipsoid(px, py, pz, -0.64, 0.74, 0.11, 0.17, 0.16, 0.16), 0.04);
+
+  d = smin(d, sdCapsule(px, py, pz,  0.40, 0.83, 0.03,  0.64, 0.74, 0.11, 0.15), 0.065);
+  d = smin(d, sdEllipsoid(px, py, pz,  0.64, 0.74, 0.11, 0.17, 0.16, 0.16), 0.04);
+
+  d = smin(d, sdCapsule(px, py, pz, -0.23, 0.40, 0.03, -0.29, 0.19, 0.14, 0.17), 0.07);
+  d = smin(d, sdEllipsoid(px, py, pz, -0.29, 0.155, 0.18, 0.23, 0.155, 0.24), 0.05);
+
+  d = smin(d, sdCapsule(px, py, pz,  0.23, 0.40, 0.03,  0.29, 0.19, 0.14, 0.17), 0.07);
+  d = smin(d, sdEllipsoid(px, py, pz,  0.29, 0.155, 0.18, 0.23, 0.155, 0.24), 0.05);
+
+  d = smax(d, -sdSphere(px, py, pz, -0.145, 1.50, 0.365, 0.052), 0.020);
+  d = smax(d, -sdSphere(px, py, pz,  0.145, 1.50, 0.365, 0.052), 0.020);
+
+  return d;
+}
+
+function sdfGradient(x, y, z) {
+  const e = 0.0035;
+  let nx = sdf(x + e, y, z) - sdf(x - e, y, z);
+  let ny = sdf(x, y + e, z) - sdf(x, y - e, z);
+  let nz = sdf(x, y, z + e) - sdf(x, y, z - e);
+  const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+  if (len < 1e-12) return [0,1,0];
+  return [nx/len, ny/len, nz/len];
+}
+
+function buildImplicitSurface() {
+  const minX = -0.92, maxX = 0.92;
+  const minY = -0.035, maxY = 1.93;
+  const minZ = -0.65, maxZ = 0.65;
+
+  const step = 0.045;
+  const nx = Math.ceil((maxX - minX) / step) + 1;
+  const ny = Math.ceil((maxY - minY) / step) + 1;
+  const nz = Math.ceil((maxZ - minZ) / step) + 1;
+
+  const idx3 = (i, j, k) => i + nx * (j + ny * k);
+
+  const values = new Float32Array(nx * ny * nz);
+
+  for (let k = 0; k < nz; k++) {
+    const z = minZ + k * step;
+    for (let j = 0; j < ny; j++) {
+      const y = minY + j * step;
+      for (let i = 0; i < nx; i++) {
+        const x = minX + i * step;
+        values[idx3(i, j, k)] = sdf(x, y, z);
+      }
+    }
+  }
+
+  const positions = [];
+  const indices = [];
+  const vertexMap = new Map();
+
+  function addVertex(p) {
+    const key =
+      p[0].toFixed(5) + ',' +
+      p[1].toFixed(5) + ',' +
+      p[2].toFixed(5);
+
+    let id = vertexMap.get(key);
+    if (id !== undefined) return id;
+
+    id = positions.length / 3;
+    vertexMap.set(key, id);
+    positions.push(p[0], p[1], p[2]);
+    return id;
+  }
+
+  function addTriangle(p0, p1, p2) {
+    const ax = p1[0] - p0[0];
+    const ay = p1[1] - p0[1];
+    const az = p1[2] - p0[2];
+
+    const bx = p2[0] - p0[0];
+    const by = p2[1] - p0[1];
+    const bz = p2[2] - p0[2];
+
+    const nxv = ay * bz - az * by;
+    const nyv = az * bx - ax * bz;
+    const nzv = ax * by - ay * bx;
+
+    if (Math.sqrt(nxv*nxv + nyv*nyv + nzv*nzv) < 1e-10) return;
+
+    const cx = (p0[0] + p1[0] + p2[0]) / 3;
+    const cy = (p0[1] + p1[1] + p2[1]) / 3;
+    const cz = (p0[2] + p1[2] + p2[2]) / 3;
+
+    const g = sdfGradient(cx, cy, cz);
+    if (nxv * g[0] + nyv * g[1] + nzv * g[2] < 0) {
+      const tmp = p1;
+      p1 = p2;
+      p2 = tmp;
+    }
+
+    const a = addVertex(p0);
+    const b = addVertex(p1);
+    const c = addVertex(p2);
+    indices.push(a, b, c);
+  }
+
+  function addQuad(pts) {
+    let cx = 0, cy = 0, cz = 0;
+    for (const p of pts) {
+      cx += p[0]; cy += p[1]; cz += p[2];
+    }
+    cx /= 4; cy /= 4; cz /= 4;
+
+    const n = sdfGradient(cx, cy, cz);
+
+    let ux = pts[0][0] - cx;
+    let uy = pts[0][1] - cy;
+    let uz = pts[0][2] - cz;
+
+    const nd = ux*n[0] + uy*n[1] + uz*n[2];
+    ux -= n[0] * nd;
+    uy -= n[1] * nd;
+    uz -= n[2] * nd;
+
+    let ul = Math.sqrt(ux*ux + uy*uy + uz*uz);
+    if (ul < 1e-8) {
+      ux = Math.abs(n[0]) < 0.9 ? 1 : 0;
+      uy = Math.abs(n[0]) < 0.9 ? 0 : 0;
+      uz = Math.abs(n[0]) < 0.9 ? 0 : 1;
+      const d2 = ux*n[0] + uy*n[1] + uz*n[2];
+      ux -= n[0] * d2;
+      uy -= n[1] * d2;
+      uz -= n[2] * d2;
+      ul = Math.sqrt(ux*ux + uy*uy + uz*uz);
+    }
+
+    ux /= ul; uy /= ul; uz /= ul;
+
+    const vx = n[1] * uz - n[2] * uy;
+    const vy = n[2] * ux - n[0] * uz;
+    const vz = n[0] * uy - n[1] * ux;
+
+    const arr = pts.map((p) => {
+      const dx = p[0] - cx;
+      const dy = p[1] - cy;
+      const dz = p[2] - cz;
+      const u = dx * ux + dy * uy + dz * uz;
+      const v = dx * vx + dy * vy + dz * vz;
+      return { p, a: Math.atan2(v, u) };
+    });
+
+    arr.sort((a, b) => a.a - b.a);
+
+    addTriangle(arr[0].p, arr[1].p, arr[2].p);
+    addTriangle(arr[0].p, arr[2].p, arr[3].p);
+  }
+
+  const OFFS = [
+    [0,0,0], [1,0,0], [1,1,0], [0,1,0],
+    [0,0,1], [1,0,1], [1,1,1], [0,1,1]
+  ];
+
+  const TETS = [
+    [0,5,1,6],
+    [0,1,2,6],
+    [0,2,3,6],
+    [0,3,7,6],
+    [0,7,4,6],
+    [0,4,5,6]
+  ];
+
+  const EDGES = [
+    [0,1], [0,2], [0,3],
+    [1,2], [1,3], [2,3]
+  ];
+
+  const cornerPos = new Array(8);
+  const cornerVal = new Float32Array(8);
+
+  for (let k = 0; k < nz - 1; k++) {
+    for (let j = 0; j < ny - 1; j++) {
+      for (let i = 0; i < nx - 1; i++) {
+        for (let c = 0; c < 8; c++) {
+          const ox = OFFS[c][0];
+          const oy = OFFS[c][1];
+          const oz = OFFS[c][2];
+          const ii = i + ox;
+          const jj = j + oy;
+          const kk = k + oz;
+
+          cornerPos[c] = [
+            minX + ii * step,
+            minY + jj * step,
+            minZ + kk * step
+          ];
+          cornerVal[c] = values[idx3(ii, jj, kk)];
+        }
+
+        for (const tet of TETS) {
+          const pts = [];
+
+          for (const e of EDGES) {
+            const a = tet[e[0]];
+            const b = tet[e[1]];
+            const va = cornerVal[a];
+            const vb = cornerVal[b];
+
+            if ((va < 0) !== (vb < 0)) {
+              const t = va / (va - vb);
+              const pa = cornerPos[a];
+              const pb = cornerPos[b];
+
+              pts.push([
+                pa[0] + (pb[0] - pa[0]) * t,
+                pa[1] + (pb[1] - pa[1]) * t,
+                pa[2] + (pb[2] - pa[2]) * t
+              ]);
+            }
+          }
+
+          if (pts.length === 3) {
+            addTriangle(pts[0], pts[1], pts[2]);
+          } else if (pts.length === 4) {
+            addQuad(pts);
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    positions: new Float32Array(positions),
+    indices: new Uint32Array(indices)
+  };
+}
+
+/* ------------------------------------------------------------------------- */
+/*  Skinning weights from the implicit-shape control points                  */
+/* ------------------------------------------------------------------------- */
+
+function getSkinWeights(x, y, z) {
+  const candidates = [];
+
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    const p = BEAR_POINTS[i];
+    const dx = x - p.x;
+    const dy = y - p.y;
+    const dz = z - p.z;
+    const d2 = dx*dx + dy*dy + dz*dz;
+    const s = INFLUENCE[i];
+    const w = Math.exp(-d2 / (2 * s * s));
+
+    if (w > 1e-6) candidates.push([i, w]);
+  }
+
+  candidates.sort((a, b) => b[1] - a[1]);
+
+  const count = Math.min(MAX_INF, candidates.length);
+  const idx = new Uint8Array(MAX_INF);
+  const val = new Float32Array(MAX_INF);
+
+  let sum = 0;
+  for (let k = 0; k < count; k++) {
+    idx[k] = candidates[k][0];
+    val[k] = candidates[k][1];
+    sum += candidates[k][1];
+  }
+
+  if (sum < 1e-9) {
+    idx[0] = 0;
+    val[0] = 1;
+  } else {
+    for (let k = 0; k < count; k++) val[k] /= sum;
+  }
+
+  return { idx, val };
+}
+
+/* ------------------------------------------------------------------------- */
+/*  BASE geometry + rest state                                               */
+/* ------------------------------------------------------------------------- */
+
+const BASE = {};
+
+function buildBase() {
+  const surface = buildImplicitSurface();
+
+  BASE.positions = surface.positions;
+  BASE.indices = surface.indices;
+  BASE.vertexCount = surface.positions.length / 3;
+
+  if (BASE.vertexCount === 0) {
+    throw new Error('Gummy geometry generation failed.');
+  }
+
+  /* Weighted rest center. */
+  let totalMass = 0;
+  let cx = 0, cy = 0, cz = 0;
+
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    const m = POINT_MASS[i];
+    const p = BEAR_POINTS[i];
+    totalMass += m;
+    cx += p.x * m;
+    cy += p.y * m;
+    cz += p.z * m;
+  }
+
+  const restCenter = new THREE.Vector3(cx / totalMass, cy / totalMass, cz / totalMass);
+  BASE.restCenter = restCenter;
+
+  const restRel = new Float32Array(BEAR_POINTS.length * 3);
+
+  const cov = [
+    0,0,0,
+    0,0,0,
+    0,0,0
+  ];
+
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    const p = BEAR_POINTS[i];
+    const m = POINT_MASS[i];
+
+    const rx = p.x - restCenter.x;
+    const ry = p.y - restCenter.y;
+    const rz = p.z - restCenter.z;
+
+    restRel[i*3+0] = rx;
+    restRel[i*3+1] = ry;
+    restRel[i*3+2] = rz;
+
+    cov[0] += m * rx * rx;
+    cov[1] += m * rx * ry;
+    cov[2] += m * rx * rz;
+
+    cov[3] += m * ry * rx;
+    cov[4] += m * ry * ry;
+    cov[5] += m * ry * rz;
+
+    cov[6] += m * rz * rx;
+    cov[7] += m * rz * ry;
+    cov[8] += m * rz * rz;
+  }
+
+  cov[0] += 0.01;
+  cov[4] += 0.01;
+  cov[8] += 0.01;
+
+  BASE.restRel = restRel;
+  BASE.restCovInv =
+    invert3(cov) || [1,0,0, 0,1,0, 0,0,1];
+
+  BASE.edges = EDGE_DEFS.map(([a, b, st]) => ({
+    a, b, st,
+    rest: BEAR_POINTS[a].distanceTo(BEAR_POINTS[b])
+  }));
+
+  const n = BASE.vertexCount;
+  BASE.vertRel = new Float32Array(n * 3);
+  BASE.weightIdx = new Uint8Array(n * MAX_INF);
+  BASE.weightVal = new Float32Array(n * MAX_INF);
+
+  for (let v = 0; v < n; v++) {
+    const x = BASE.positions[v*3+0];
+    const y = BASE.positions[v*3+1];
+    const z = BASE.positions[v*3+2];
+
+    BASE.vertRel[v*3+0] = x - restCenter.x;
+    BASE.vertRel[v*3+1] = y - restCenter.y;
+    BASE.vertRel[v*3+2] = z - restCenter.z;
+
+    const weights = getSkinWeights(x, y, z);
+
+    for (let k = 0; k < MAX_INF; k++) {
+      BASE.weightIdx[v*MAX_INF+k] = weights.idx[k];
+      BASE.weightVal[v*MAX_INF+k] = weights.val[k];
+    }
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/*  Renderer / scene / camera                                                */
+/* ------------------------------------------------------------------------- */
+
+const canvas = document.querySelector('#c');
+
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: true,
+  powerPreference: 'high-performance'
+});
+
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xfbfaf7);
+scene.fog = new THREE.Fog(0xfbfaf7, 14, 28);
+
+const camera = new THREE.PerspectiveCamera(
+  35,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  60
+);
+
+camera.position.set(0, 4.15, 9.1);
+camera.lookAt(0, 0.9, 0);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envRT = pmrem.fromScene(new RoomEnvironment(), 0.045);
+scene.environment = envRT.texture;
+pmrem.dispose();
+
+/* Lights */
+const hemi = new THREE.HemisphereLight(0xffffff, 0xe8e7e2, 1.1);
+scene.add(hemi);
+
+const key = new THREE.DirectionalLight(0xffffff, 2.7);
+key.position.set(4.5, 7.5, 5.5);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 30;
+key.shadow.camera.left = -8;
+key.shadow.camera.right = 8;
+key.shadow.camera.top = 8;
+key.shadow.camera.bottom = -8;
+key.shadow.bias = -0.0008;
+key.shadow.normalBias = 0.02;
+scene.add(key);
+
+const back = new THREE.DirectionalLight(0xffffff, 2.0);
+back.position.set(-5.5, 4.4, -6.5);
+scene.add(back);
+
+const fill = new THREE.DirectionalLight(0xffffff, 0.8);
+fill.position.set(-1, 2.8, 8);
+scene.add(fill);
+
+/* White table */
+const table = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({
+    color: 0xfdfcf9,
+    roughness: 0.72,
+    metalness: 0.0,
+    envMapIntensity: 0.22
+  })
+);
+
+table.rotation.x = -Math.PI / 2;
+table.position.y = 0;
+table.receiveShadow = true;
+scene.add(table);
+
+/* Build the shared gummy surface. */
+buildBase();
+
+/* ------------------------------------------------------------------------- */
+/*  Materials and decorative bits                                            */
+/* ------------------------------------------------------------------------- */
+
+const gummyMaterials = FLAVORS.map((f, i) => {
+  const clear = i === 4;
+
+  return new THREE.MeshPhysicalMaterial({
+    color: f.color,
+    transmission: clear ? 1.0 : 0.92,
+    thickness: clear ? 1.45 : 1.05,
+    roughness: 0.12,
+    metalness: 0.0,
+    ior: 1.45,
+    attenuationColor: new THREE.Color(f.attenuation),
+    attenuationDistance: f.dist,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.038,
+    specularIntensity: 1.0,
+    specularColor: 0xffffff,
+    envMapIntensity: 1.45,
+    transparent: true,
+    opacity: 1.0,
+    side: THREE.FrontSide,
+    depthWrite: true
+  });
+});
+
+const facialMaterial = new THREE.MeshPhysicalMaterial({
+  color: 0x2a1912,
+  roughness: 0.22,
+  metalness: 0.0,
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.06,
+  envMapIntensity: 1.2
+});
+
+const eyeGeometry = new THREE.SphereGeometry(0.028, 12, 8);
+const noseGeometry = new THREE.SphereGeometry(0.036, 12, 8);
+
+function makeShadowTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0.00, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.38, 'rgba(255,255,255,0.48)');
+  g.addColorStop(0.72, 'rgba(255,255,255,0.13)');
+  g.addColorStop(1.00, 'rgba(255,255,255,0.0)');
+
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+const shadowTexture = makeShadowTexture();
+const shadowGeometry = new THREE.PlaneGeometry(1, 1);
+
+/* ------------------------------------------------------------------------- */
+/*  Bears / simulation state                                                 */
+/* ------------------------------------------------------------------------- */
+
+const bears = [];
+
+const raycaster = new THREE.Raycaster();
+const mouseNDC = new THREE.Vector2();
+
+const drag = {
+  active: false,
+  bear: null,
+  index: -1,
+  plane: new THREE.Plane(),
+  offset: new THREE.Vector3(),
+  target: new THREE.Vector3(),
+  velocity: new THREE.Vector3()
+};
+
+const tempVec = new THREE.Vector3();
+
+function computeFrame(bear) {
+  let total = 0;
+  let cx = 0, cy = 0, cz = 0;
+
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    const m = POINT_MASS[i];
+    const p = bear.pos[i];
+    total += m;
+    cx += p.x * m;
+    cy += p.y * m;
+    cz += p.z * m;
+  }
+
+  const c = new THREE.Vector3(cx / total, cy / total, cz / total);
+
+  const A = [
+    0,0,0,
+    0,0,0,
+    0,0,0
+  ];
+
+  const restRel = BASE.restRel;
+
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    const p = bear.pos[i];
+    const m = POINT_MASS[i];
+
+    const x = p.x - c.x;
+    const y = p.y - c.y;
+    const z = p.z - c.z;
+
+    const ri = i * 3;
+    const rx = restRel[ri+0];
+    const ry = restRel[ri+1];
+    const rz = restRel[ri+2];
+
+    A[0] += m * x * rx;
+    A[1] += m * x * ry;
+    A[2] += m * x * rz;
+
+    A[3] += m * y * rx;
+    A[4] += m * y * ry;
+    A[5] += m * y * rz;
+
+    A[6] += m * z * rx;
+    A[7] += m * z * ry;
+    A[8] += m * z * rz;
+  }
+
+  const M = mul3(A, BASE.restCovInv);
+  const R = polarDecomp(M);
+  const det = det3(M);
+
+  let Tvol = R.slice();
+
+  if (det > 1e-5 && Number.isFinite(det)) {
+    let s = 1 / Math.cbrt(det);
+    s = Math.max(0.48, Math.min(2.05, s));
+    Tvol = M.map(v => v * s);
+  }
+
+  return { c, M, R, Tvol, det };
+}
+
+function applyPin(bear) {
+  if (bear.pinnedIndex < 0) return;
+
+  const p = bear.pos[bear.pinnedIndex];
+  p.copy(bear.grabTarget);
+  p.y = Math.max(0.035, p.y);
+}
+
+function clampFloor(bear) {
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    if (i === bear.pinnedIndex) continue;
+    const p = bear.pos[i];
+    const minY = FLOOR_RADIUS[i];
+    if (p.y < minY) p.y = minY;
+  }
+}
+
+function solveEdges(bear, scale) {
+  for (const edge of BASE.edges) {
+    const ia = edge.a;
+    const ib = edge.b;
+
+    const pa = bear.pos[ia];
+    const pb = bear.pos[ib];
+
+    const invA = ia === bear.pinnedIndex ? 0 : 1 / POINT_MASS[ia];
+    const invB = ib === bear.pinnedIndex ? 0 : 1 / POINT_MASS[ib];
+    const invSum = invA + invB;
+
+    if (invSum <= 1e-9) continue;
+
+    let dx = pb.x - pa.x;
+    let dy = pb.y - pa.y;
+    let dz = pb.z - pa.z;
+
+    const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    if (dist < 1e-7) continue;
+
+    const correction = ((dist - edge.rest) / dist) * edge.st * scale;
+    const wa = correction * invA / invSum;
+    const wb = correction * invB / invSum;
+
+    pa.x += dx * wa;
+    pa.y += dy * wa;
+    pa.z += dz * wa;
+
+    pb.x -= dx * wb;
+    pb.y -= dy * wb;
+    pb.z -= dz * wb;
+  }
+}
+
+function solveShape(bear, shapeK, volK) {
+  const frame = computeFrame(bear);
+
+  const c = frame.c;
+  const R = frame.R;
+  const Tv = frame.Tvol;
+  const pin = bear.pinnedIndex;
+  const restRel = BASE.restRel;
+
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    if (i === pin) continue;
+
+    const ri = i * 3;
+    const rx = restRel[ri+0];
+    const ry = restRel[ri+1];
+    const rz = restRel[ri+2];
+
+    const p = bear.pos[i];
+
+    const tx =
+      c.x + R[0]*rx + R[1]*ry + R[2]*rz;
+    const ty =
+      c.y + R[3]*rx + R[4]*ry + R[5]*rz;
+    const tz =
+      c.z + R[6]*rx + R[7]*ry + R[8]*rz;
+
+    p.x += (tx - p.x) * shapeK;
+    p.y += (ty - p.y) * shapeK;
+    p.z += (tz - p.z) * shapeK;
+
+    const vx =
+      c.x + Tv[0]*rx + Tv[1]*ry + Tv[2]*rz;
+    const vy =
+      c.y + Tv[3]*rx + Tv[4]*ry + Tv[5]*rz;
+    const vz =
+      c.z + Tv[6]*rx + Tv[7]*ry + Tv[8]*rz;
+
+    p.x += (vx - p.x) * volK;
+    p.y += (vy - p.y) * volK;
+    p.z += (vz - p.z) * volK;
+  }
+}
+
+function collideBears() {
+  for (let a = 0; a < bears.length; a++) {
+    const A = bears[a];
+
+    for (let b = a + 1; b < bears.length; b++) {
+      const B = bears[b];
+
+      for (let i = 0; i < BEAR_POINTS.length; i++) {
+        const pa = A.pos[i];
+        const ra = COLLIDE_RADIUS[i];
+        const invA = i === A.pinnedIndex ? 0 : 1 / POINT_MASS[i];
+
+        for (let j = 0; j < BEAR_POINTS.length; j++) {
+          const pb = B.pos[j];
+          const rb = COLLIDE_RADIUS[j];
+          const invB = j === B.pinnedIndex ? 0 : 1 / POINT_MASS[j];
+
+          const invSum = invA + invB;
+          if (invSum <= 1e-9) continue;
+
+          let dx = pb.x - pa.x;
+          let dy = pb.y - pa.y;
+          let dz = pb.z - pa.z;
+
+          const minDist = ra + rb;
+          let dist2 = dx*dx + dy*dy + dz*dz;
+
+          if (dist2 >= minDist * minDist) continue;
+
+          let dist = Math.sqrt(dist2);
+          if (dist < 1e-6) {
+            dx = 1; dy = 0; dz = 0;
+            dist = 1e-6;
+          } else {
+            dx /= dist;
+            dy /= dist;
+            dz /= dist;
+          }
+
+          const overlap = minDist - dist;
+          const corr = overlap / invSum * 0.92;
+
+          pa.x -= dx * corr * invA;
+          pa.y -= dy * corr * invA;
+          pa.z -= dz * corr * invA;
+
+          pb.x += dx * corr * invB;
+          pb.y += dy * corr * invB;
+          pb.z += dz * corr * invB;
+        }
+      }
+    }
+  }
+}
+
+function integrateBear(bear, h) {
+  const damping = 0.9965 + softness * 0.0026;
+
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    if (i === bear.pinnedIndex) continue;
+
+    const p = bear.pos[i];
+    const prev = bear.prev[i];
+
+    let vx = (p.x - prev.x) * damping;
+    let vy = (p.y - prev.y) * damping;
+    let vz = (p.z - prev.z) * damping;
+
+    const speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
+    const maxStep = 0.76;
+
+    if (speed > maxStep) {
+      const s = maxStep / speed;
+      vx *= s;
+      vy *= s;
+      vz *= s;
+    }
+
+    const ox = p.x;
+    const oy = p.y;
+    const oz = p.z;
+
+    prev.set(ox, oy, oz);
+
+    p.set(
+      ox + vx,
+      oy + vy - GRAVITY * h * h,
+      oz + vz
+    );
+  }
+
+  applyPin(bear);
+}
+
+function finalizeBear(bear, h) {
+  const pin = bear.pinnedIndex;
+
+  if (pin >= 0) {
+    const p = bear.pos[pin];
+    const v = bear.grabVel;
+    bear.prev[pin].set(
+      p.x - v.x * h,
+      p.y - v.y * h,
+      p.z - v.z * h
+    );
+  }
+
+  let contact = false;
+  let impact = 0;
+
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    const p = bear.pos[i];
+    const prev = bear.prev[i];
+    const r = FLOOR_RADIUS[i];
+
+    if (p.y <= r + 0.012) contact = true;
+
+    if (i === pin) continue;
+
+    const vy = p.y - prev.y;
+
+    if (p.y <= r + 0.008 && vy < -0.0001) {
+      impact = Math.max(impact, -vy / h);
+
+      const restitution = 0.18 + softness * 0.22;
+      prev.y = p.y + vy * restitution;
+
+      const friction = 0.84;
+      prev.x = p.x + (prev.x - p.x) * friction;
+      prev.z = p.z + (prev.z - p.z) * friction;
+
+      contact = true;
+    }
+  }
+
+  if (contact) {
+    if (bear.airborne && impact > 0.45) {
+      totalBounces++;
+    }
+    bear.airborne = false;
+  } else {
+    bear.airborne = true;
+  }
+
+  bear.grounded = contact;
+
+  bear.idleTimer -= h;
+
+  if (bear.idleTimer <= 0) {
+    bear.idleTimer = 2.4 + Math.random() * 5.0;
+
+    if (bear.grounded && pin < 0 && Math.random() < 0.72) {
+      const up = 1.1 + Math.random() * 2.0;
+      const vx = (Math.random() - 0.5) * 1.3;
+      const vz = (Math.random() - 0.5) * 1.3;
+
+      for (let i = 0; i < BEAR_POINTS.length; i++) {
+        bear.prev[i].x -= vx * h;
+        bear.prev[i].y -= up * h;
+        bear.prev[i].z -= vz * h;
+      }
+    }
+  }
+}
+
+function physicsStep(h) {
+  for (const bear of bears) integrateBear(bear, h);
+
+  const shapeK = 0.15 - 0.09 * softness;
+  const volK = 0.014 + 0.018 * (1 - softness);
+  const edgeScale = 0.56 + 0.24 * (1 - softness);
+
+  for (let iter = 0; iter < 3; iter++) {
+    for (const bear of bears) {
+      applyPin(bear);
+      clampFloor(bear);
+      solveEdges(bear, edgeScale);
+      solveShape(bear, shapeK, volK);
+      clampFloor(bear);
+    }
+
+    collideBears();
+  }
+
+  for (const bear of bears) {
+    applyPin(bear);
+    clampFloor(bear);
+  }
+
+  for (const bear of bears) {
+    finalizeBear(bear, h);
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/*  Bear creation / mesh deformation                                         */
+/* ------------------------------------------------------------------------- */
+
+function addOrnament(bear, rest, geometry) {
+  const weights = getSkinWeights(rest.x, rest.y, rest.z);
+
+  const mesh = new THREE.Mesh(geometry, facialMaterial);
+  mesh.frustumCulled = false;
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  scene.add(mesh);
+
+  bear.ornaments.push({
+    mesh,
+    rest: rest.clone(),
+    idx: weights.idx,
+    val: weights.val
+  });
+}
+
+function createBear(colorIndex, spawn, initialVelocity) {
+  const ci = Math.max(0, Math.min(FLAVORS.length - 1, colorIndex));
+
+  const pos = [];
+  const prev = [];
+
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    const p = new THREE.Vector3(
+      BEAR_POINTS[i].x + spawn.x,
+      BEAR_POINTS[i].y + spawn.y,
+      BEAR_POINTS[i].z + spawn.z
+    );
+
+    pos.push(p);
+
+    const pr = p.clone().addScaledVector(initialVelocity, -H);
+    prev.push(pr);
+  }
+
+  const bear = {
+    colorIndex: ci,
+    pos,
+    prev,
+    center: new THREE.Vector3(),
+    R: [1,0,0, 0,1,0, 0,0,1],
+    res: new Float32Array(BEAR_POINTS.length * 3),
+    det: 1,
+    pinnedIndex: -1,
+    grabTarget: new THREE.Vector3(),
+    grabVel: new THREE.Vector3(),
+    idleTimer: 2.0 + Math.random() * 4.0,
+    grounded: false,
+    airborne: spawn.y > 0.15,
+    ornaments: [],
+    shadowIndex: bears.length
+  };
+
+  const geometry = new THREE.BufferGeometry();
+
+  const posAttr = new THREE.BufferAttribute(
+    new Float32Array(BASE.positions.length),
+    3
+  );
+  posAttr.setUsage(THREE.DynamicDrawUsage);
+
+  const normAttr = new THREE.BufferAttribute(
+    new Float32Array(BASE.positions.length),
+    3
+  );
+  normAttr.setUsage(THREE.DynamicDrawUsage);
+
+  geometry.setAttribute('position', posAttr);
+  geometry.setAttribute('normal', normAttr);
+  geometry.setIndex(
+    new THREE.BufferAttribute(new Uint32Array(BASE.indices), 1)
+  );
+
+  geometry.boundingSphere = new THREE.Sphere(
+    new THREE.Vector3(0, 1, 0),
+    100
+  );
+
+  geometry.boundingBox = new THREE.Box3(
+    new THREE.Vector3(-100, -100, -100),
+    new THREE.Vector3(100, 100, 100)
+  );
+
+  const mesh = new THREE.Mesh(geometry, gummyMaterials[ci]);
+  mesh.position.set(0, 0, 0);
+  mesh.frustumCulled = false;
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  mesh.userData.bear = bear;
+
+  bear.mesh = mesh;
+  scene.add(mesh);
+
+  /* Soft colored contact shadow. */
+  const shadowMat = new THREE.MeshBasicMaterial({
+    map: shadowTexture,
+    color: new THREE.Color(FLAVORS[ci].shadow),
+    transparent: true,
+    opacity: 0.32,
+    depthWrite: false,
+    toneMapped: false
+  });
+
+  const shadow = new THREE.Mesh(shadowGeometry, shadowMat);
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = 0.003 + bear.shadowIndex * 0.00004;
+  shadow.renderOrder = 1;
+  shadow.frustumCulled = false;
+
+  bear.shadow = shadow;
+  scene.add(shadow);
+
+  /* Molded-looking little face bits. */
+  addOrnament(
+    bear,
+    new THREE.Vector3(-0.145, 1.50, 0.354),
+    eyeGeometry
+  );
+
+  addOrnament(
+    bear,
+    new THREE.Vector3(0.145, 1.50, 0.354),
+    eyeGeometry
+  );
+
+  addOrnament(
+    bear,
+    new THREE.Vector3(0, 1.34, 0.490),
+    noseGeometry
+  );
+
+  bears.push(bear);
+  bear.grabTarget.copy(bear.pos[0]);
+
+  updateBearTransform(bear);
+  updateBearMesh(bear);
+  updateBearOrnaments(bear);
+  updateBearShadow(bear);
+
+  return bear;
+}
+
+function removeBear(bear) {
+  const index = bears.indexOf(bear);
+  if (index < 0) return;
+
+  if (drag.bear === bear) {
+    drag.active = false;
+    drag.bear = null;
+    drag.index = -1;
+    document.body.classList.remove('grabbing');
+  }
+
+  scene.remove(bear.mesh);
+  bear.mesh.geometry.dispose();
+
+  for (const o of bear.ornaments) {
+    scene.remove(o.mesh);
+  }
+
+  scene.remove(bear.shadow);
+  bear.shadow.material.dispose();
+
+  bears.splice(index, 1);
+}
+
+function updateBearTransform(bear) {
+  const frame = computeFrame(bear);
+
+  bear.center.copy(frame.c);
+  bear.det = frame.det;
+
+  for (let k = 0; k < 9; k++) {
+    bear.R[k] = frame.R[k];
+  }
+
+  const R = frame.R;
+  const c = frame.c;
+  const restRel = BASE.restRel;
+  const res = bear.res;
+
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    const ri = i * 3;
+
+    const rx = restRel[ri+0];
+    const ry = restRel[ri+1];
+    const rz = restRel[ri+2];
+
+    const rigidX = c.x + R[0]*rx + R[1]*ry + R[2]*rz;
+    const rigidY = c.y + R[3]*rx + R[4]*ry + R[5]*rz;
+    const rigidZ = c.z + R[6]*rx + R[7]*ry + R[8]*rz;
+
+    const p = bear.pos[i];
+    const r = i * 3;
+
+    res[r+0] = p.x - rigidX;
+    res[r+1] = p.y - rigidY;
+    res[r+2] = p.z - rigidZ;
+  }
+}
+
+function updateBearMesh(bear) {
+  const geometry = bear.mesh.geometry;
+  const posAttr = geometry.attributes.position;
+  const arr = posAttr.array;
+
+  const R = bear.R;
+  const c = bear.center;
+  const res = bear.res;
+
+  const vertRel = BASE.vertRel;
+  const wIdx = BASE.weightIdx;
+  const wVal = BASE.weightVal;
+
+  const n = BASE.vertexCount;
+
+  for (let v = 0; v < n; v++) {
+    const vi = v * 3;
+
+    const rx = vertRel[vi+0];
+    const ry = vertRel[vi+1];
+    const rz = vertRel[vi+2];
+
+    let x = c.x + R[0]*rx + R[1]*ry + R[2]*rz;
+    let y = c.y + R[3]*rx + R[4]*ry + R[5]*rz;
+    let z = c.z + R[6]*rx + R[7]*ry + R[8]*rz;
+
+    let dx = 0, dy = 0, dz = 0;
+
+    const wi = v * MAX_INF;
+
+    for (let k = 0; k < MAX_INF; k++) {
+      const w = wVal[wi+k];
+      if (w === 0) continue;
+
+      const bi = wIdx[wi+k] * 3;
+
+      dx += res[bi+0] * w;
+      dy += res[bi+1] * w;
+      dz += res[bi+2] * w;
+    }
+
+    arr[vi+0] = x + dx;
+    arr[vi+1] = y + dy;
+    arr[vi+2] = z + dz;
+  }
+
+  posAttr.needsUpdate = true;
+
+  geometry.computeVertexNormals();
+  geometry.attributes.normal.needsUpdate = true;
+}
+
+function deformLocalPoint(bear, rest, idx, val, out) {
+  const rx = rest.x - BASE.restCenter.x;
+  const ry = rest.y - BASE.restCenter.y;
+  const rz = rest.z - BASE.restCenter.z;
+
+  const R = bear.R;
+  const c = bear.center;
+  const res = bear.res;
+
+  let x = c.x + R[0]*rx + R[1]*ry + R[2]*rz;
+  let y = c.y + R[3]*rx + R[4]*ry + R[5]*rz;
+  let z = c.z + R[6]*rx + R[7]*ry + R[8]*rz;
+
+  let dx = 0, dy = 0, dz = 0;
+
+  for (let k = 0; k < MAX_INF; k++) {
+    const w = val[k];
+    if (w === 0) continue;
+
+    const bi = idx[k] * 3;
+    dx += res[bi+0] * w;
+    dy += res[bi+1] * w;
+    dz += res[bi+2] * w;
+  }
+
+  out.set(x + dx, y + dy, z + dz);
+}
+
+function updateBearOrnaments(bear) {
+  for (const o of bear.ornaments) {
+    deformLocalPoint(bear, o.rest, o.idx, o.val, o.mesh.position);
+  }
+}
+
+function updateBearShadow(bear) {
+  let minGap = 1e9;
+  let minX = Infinity, maxX = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    const p = bear.pos[i];
+    const gap = p.y - FLOOR_RADIUS[i];
+
+    if (gap < minGap) minGap = gap;
+
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.z < minZ) minZ = p.z;
+    if (p.z > maxZ) maxZ = p.z;
+  }
+
+  const h = Math.max(0, minGap);
+  const cx = (minX + maxX) * 0.5;
+  const cz = (minZ + maxZ) * 0.5;
+
+  const spreadX = Math.max(0.85, maxX - minX);
+  const spreadZ = Math.max(0.75, maxZ - minZ);
+
+  const heightScale = 1 + Math.min(h, 3.4) * 0.14;
+
+  bear.shadow.position.set(
+    cx,
+    0.003 + bear.shadowIndex * 0.00004,
+    cz
+  );
+
+  bear.shadow.scale.set(
+    spreadX * 1.28 * heightScale,
+    spreadZ * 1.58 * heightScale,
+    1
+  );
+
+  const clearFactor = bear.colorIndex === 4 ? 0.78 : 1.0;
+  bear.shadow.material.opacity =
+    0.33 * clearFactor * Math.max(0.10, 1 - h / 4.2);
+}
+
+/* ------------------------------------------------------------------------- */
+/*  Pouring                                                                 */
+/* ------------------------------------------------------------------------- */
+
+function pourBears(count = 4) {
+  for (let i = 0; i < count; i++) {
+    if (bears.length >= MAX_BEARS) {
+      const victim = bears.find(b => b !== drag.bear);
+      if (victim) removeBear(victim);
+      else break;
+    }
+
+    const ci =
+      selectedFlavor >= 0
+        ? selectedFlavor
+        : Math.floor(Math.random() * FLAVORS.length);
+
+    const angle = Math.random() * Math.PI * 2;
+    const radius = Math.sqrt(Math.random()) * 1.8;
+
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius * 0.72;
+
+    const spawn = new THREE.Vector3(
+      x,
+      4.3 + Math.random() * 2.2,
+      z
+    );
+
+    const initialVelocity = new THREE.Vector3(
+      (Math.random() - 0.5) * 5.0,
+      -1.2 - Math.random() * 2.5,
+      (Math.random() - 0.5) * 4.0
+    );
+
+    const bear = createBear(ci, spawn, initialVelocity);
+    bear.airborne = true;
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/*  Interaction                                                              */
+/* ------------------------------------------------------------------------- */
+
+function updatePointerFromEvent(e) {
+  const rect = renderer.domElement.getBoundingClientRect();
+
+  mouseNDC.x =
+    ((e.clientX - rect.left) / rect.width) * 2 - 1;
+
+  mouseNDC.y =
+    -((e.clientY - rect.top) / rect.height) * 2 + 1;
+}
+
+function updateDragTarget(delta) {
+  if (!drag.active || !drag.bear) return;
+
+  raycaster.setFromCamera(mouseNDC, camera);
+
+  const world = new THREE.Vector3();
+
+  if (!raycaster.ray.intersectPlane(drag.plane, world)) return;
+
+  world.add(drag.offset);
+  world.y = Math.max(0.035, world.y);
+
+  const oldX = drag.target.x;
+  const oldY = drag.target.y;
+  const oldZ = drag.target.z;
+
+  drag.target.copy(world);
+
+  const dt = Math.max(delta, 1 / 240);
+
+  const instX = (world.x - oldX) / dt;
+  const instY = (world.y - oldY) / dt;
+  const instZ = (world.z - oldZ) / dt;
+
+  tempVec.set(instX, instY, instZ);
+
+  if (tempVec.length() > 22) tempVec.setLength(22);
+
+  drag.velocity.lerp(tempVec, 0.33);
+
+  drag.bear.grabTarget.copy(world);
+  drag.bear.grabVel.copy(drag.velocity);
+}
+
+function startDrag(e) {
+  updatePointerFromEvent(e);
+
+  raycaster.setFromCamera(mouseNDC, camera);
+
+  const meshes = bears.map(b => b.mesh);
+  const hits = raycaster.intersectObjects(meshes, false);
+
+  if (hits.length === 0) return false;
+
+  const hit = hits[0];
+  const bear = hit.object.userData.bear;
+
+  let best = 0;
+  let bestD = Infinity;
+
+  for (let i = 0; i < BEAR_POINTS.length; i++) {
+    const d = bear.pos[i].distanceToSquared(hit.point);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+
+  const p = bear.pos[best];
+
+  const normal = new THREE.Vector3();
+  camera.getWorldDirection(normal);
+
+  drag.plane.setFromNormalAndCoplanarPoint(normal, hit.point);
+  drag.offset.copy(p).sub(hit.point);
+
+  drag.active = true;
+  drag.bear = bear;
+  drag.index = best;
+  drag.target.copy(p);
+  drag.velocity.set(0, 0, 0);
+
+  bear.pinnedIndex = best;
+  bear.grabTarget.copy(p);
+  bear.grabVel.set(0, 0, 0);
+  bear.idleTimer = 1.8 + Math.random() * 2.2;
+
+  document.body.classList.add('grabbing');
+
+  e.preventDefault();
+  return true;
+}
+
+function endDrag() {
+  if (!drag.active) return;
+
+  const bear = drag.bear;
+  const pin = drag.index;
+
+  if (bear) {
+    bear.pinnedIndex = -1;
+
+    const v = drag.velocity.clone();
+
+    if (v.lengthSq() > 0.02) {
+      if (v.length() > 18) v.setLength(18);
+
+      for (let i = 0; i < BEAR_POINTS.length; i++) {
+        const w = i === pin ? 0.42 : 0.25;
+        bear.prev[i].x -= v.x * w * H;
+        bear.prev[i].y -= v.y * w * H;
+        bear.prev[i].z -= v.z * w * H;
+      }
+    }
+
+    bear.idleTimer = 1.4 + Math.random() * 2.2;
+  }
+
+  drag.active = false;
+  drag.bear = null;
+  drag.index = -1;
+
+  document.body.classList.remove('grabbing');
+}
+
+/* ------------------------------------------------------------------------- */
+/*  UI                                                                       */
+/* ------------------------------------------------------------------------- */
+
+const cursor = document.querySelector('#cursor');
+const swatchWrap = document.querySelector('#swatches');
+const wobbleInput = document.querySelector('#wobble');
+const wobbleValue = document.querySelector('#wobbleValue');
+const stretchReadout = document.querySelector('#stretchReadout');
+const bounceReadout = document.querySelector('#bounceReadout');
+const pourButton = document.querySelector('#pour');
+
+softness = Number(wobbleInput.value) / 100;
+wobbleValue.textContent = wobbleInput.value;
+
+const swatches = FLAVORS.map((f, i) => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'swatch';
+  button.style.background = f.css;
+  button.title = f.name;
+  button.setAttribute('aria-label', f.name);
+
+  button.addEventListener('click', () => {
+    selectedFlavor = selectedFlavor === i ? -1 : i;
+    updateSwatches();
+  });
+
+  swatchWrap.appendChild(button);
+  return button;
+});
+
+function updateSwatches() {
+  swatches.forEach((s, i) => {
+    s.classList.toggle('active', i === selectedFlavor);
+  });
+}
+
+updateSwatches();
+
+wobbleInput.addEventListener('input', () => {
+  softness = Number(wobbleInput.value) / 100;
+  wobbleValue.textContent = wobbleInput.value;
+});
+
+pourButton.addEventListener('click', () => {
+  pourBears(4);
+
+  if (pourButton.animate) {
+    pourButton.animate(
+      [
+        { transform: 'translateY(-1px) scale(1)' },
+        { transform: 'translateY(0px) scale(0.97)' },
+        { transform: 'translateY(0px) scale(1)' }
+      ],
+      { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' }
+    );
+  }
+});
+
+const STRETCH_REST = STRETCH_PAIRS.map(([a, b]) =>
+  BEAR_POINTS[a].distanceTo(BEAR_POINTS[b])
+);
+
+let statTimer = 0;
+let lastStretchText = '';
+let lastBounceText = '';
+
+function computeMaxStretch() {
+  let maxRatio = 1;
+
+  for (const bear of bears) {
+    for (let p = 0; p < STRETCH_PAIRS.length; p++) {
+      const pair = STRETCH_PAIRS[p];
+      const rest = STRETCH_REST[p];
+
+      const d = bear.pos[pair[0]].distanceTo(bear.pos[pair[1]]);
+      const ratio = d / rest;
+
+      if (ratio > maxRatio) maxRatio = ratio;
+    }
+  }
+
+  return maxRatio;
+}
+
+function updateReadouts(delta) {
+  statTimer += delta;
+  if (statTimer < 0.075) return;
+  statTimer = 0;
+
+  const stretch = Math.min(2.99, computeMaxStretch());
+  const stretchText = stretch.toFixed(2) + '×';
+
+  if (stretchText !== lastStretchText) {
+    stretchReadout.textContent = stretchText;
+    lastStretchText = stretchText;
+  }
+
+  const bounceText = String(totalBounces);
+
+  if (bounceText !== lastBounceText) {
+    bounceReadout.textContent = bounceText;
+    lastBounceText = bounceText;
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/*  Pointer / cursor                                                         */
+/* ------------------------------------------------------------------------- */
+
+window.addEventListener('pointermove', (e) => {
+  cursor.style.left = e.clientX + 'px';
+  cursor.style.top = e.clientY + 'px';
+
+  updatePointerFromEvent(e);
+}, { passive: true });
+
+document.addEventListener('pointerleave', () => {
+  cursor.style.opacity = '0';
+});
+
+document.addEventListener('pointerenter', () => {
+  cursor.style.opacity = '1';
+});
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button !== undefined && e.button !== 0) return;
+  startDrag(e);
+});
+
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
+
+window.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+});
+
+/* ------------------------------------------------------------------------- */
+/*  Initial bears                                                            */
+/* ------------------------------------------------------------------------- */
+
+const INITIAL = [
+  { ci: 0, x: -2.35, y: 0.28, z:  0.45 },
+  { ci: 1, x: -1.05, y: 0.42, z:  1.18 },
+  { ci: 3, x:  0.85, y: 0.20, z: -0.45 },
+  { ci: 2, x:  2.08, y: 0.34, z:  0.62 },
+  { ci: 4, x:  0.08, y: 0.54, z: -1.38 }
+];
+
+for (const data of INITIAL) {
+  createBear(
+    data.ci,
+    new THREE.Vector3(data.x, data.y, data.z),
+    new THREE.Vector3(0, 0, 0)
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+/*  Resize + animation                                                       */
+/* ------------------------------------------------------------------------- */
+
+function resize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  renderer.setSize(w, h);
+}
+
+window.addEventListener('resize', resize);
+resize();
+
+let lastTime = performance.now();
+let accumulator = 0;
+
+function animate(now) {
+  requestAnimationFrame(animate);
+
+  const delta = Math.min((now - lastTime) / 1000, 0.034);
+  lastTime = now;
+
+  updateDragTarget(delta);
+
+  accumulator += delta;
+
+  let steps = 0;
+
+  while (accumulator >= H && steps < 4) {
+    physicsStep(H);
+    accumulator -= H;
+    steps++;
+  }
+
+  for (const bear of bears) {
+    updateBearTransform(bear);
+    updateBearMesh(bear);
+    updateBearOrnaments(bear);
+    updateBearShadow(bear);
+  }
+
+  updateReadouts(delta);
+
+  renderer.render(scene, camera);
+}
+
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
