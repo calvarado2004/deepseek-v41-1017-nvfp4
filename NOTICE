@@ -1,0 +1,22 @@
+DeepSeek-V4.1-Flash-1017 NVFP4 on four DGX Sparks
+Copyright (c) 2026 Carlos Alvarado Martinez — MIT, see LICENSE.
+
+This repository includes third-party material under its own licenses:
+
+- build/patches/0001-0003: from ondigo-winder/deepseek-v4_1-1017-4-gb10
+  @ e7b0d33 (Apache-2.0). Unmodified.
+- build/patches/0004-0009: parts of vLLM pull requests #62196, #58681,
+  #61261, #61161, #61451 and #60792 (Apache-2.0, Copyright contributors to
+  the vLLM project), cut to their vllm/ sources and rebased onto nightly
+  0cbac6cd1; hand-placed hunks are listed in build/NOTICE.
+- build/patches/0010: a change to vLLM (Apache-2.0) by this repository.
+- assets/deepseek-logo.svg: from Wikimedia Commons, MIT, originally published
+  by deepseek-ai. The logo is a trademark of DeepSeek.
+
+Not included, fetched or built on the nodes by the scripts:
+
+- NVIDIA NCCL 2.30.7 (BSD-3-Clause), alexellis/switchless-nccl v0.0.1 patches
+  and ondigo-winder/SWITCHLESS-NCCL-RING-4-GB10 (Apache-2.0):
+  scripts/build-nccl-4hca.sh.
+- arx from kindlingai/glm-5.3-flash-gx10 (no license; not redistributed):
+  scripts/build-arx-overlay.sh assembles it from your own checkout.

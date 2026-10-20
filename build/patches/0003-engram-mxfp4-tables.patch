@@ -1,0 +1,125 @@
+--- a/vllm/models/deepseek_v41/common/engram.py
++++ b/vllm/models/deepseek_v41/common/engram.py
+@@ -959,6 +959,13 @@
+     raise FileNotFoundError(f"no safetensors index or file in {model_path}")
+ 
+ 
++def _engram_weight_is_fp4(model_path: str, name: str, dim: int) -> bool:
++    path = _resolve_checkpoint_tensor(model_path, name)
++    _, header = _safetensors_tensor_span(path)
++    info = header[name]
++    return info["dtype"] in ("U8", "I8") and int(info["shape"][-1]) * 2 == dim
++
++
+ class DiskEngramStorage:
+     """This rank's rows of an Engram table, memory-mapped from the checkpoint.
+ 
+@@ -992,7 +999,15 @@
+         self._mappings: list[mmap.mmap] = []
+         self._paths: list[str] = []
+         self._view_offsets: list[int] = []
+-        self.weight_np = self._map_rows(model_path, weight_name, dim)
++        # MXFP4 Engram tables (e.g. DeepSeek-V4.1-Flash-1017-NVFP4): U8 [rows, dim/2],
++        # E2M1 codes low nibble first, same block-32 E8M0 scales as the FP8 tables.
++        # Rows are staged packed (half the NVMe bytes) and widened to E4M3 on the
++        # device, which is exact: every E2M1 value is an E4M3 value.
++        self.fp4 = _engram_weight_is_fp4(model_path, weight_name, dim)
++        self.stored_dim = dim // 2 if self.fp4 else dim
++        self._dev_packed: torch.Tensor | None = None
++        self._fp4_lut: torch.Tensor | None = None
++        self.weight_np = self._map_rows(model_path, weight_name, self.stored_dim)
+         self.scales_np = self._map_rows(model_path, scale_name, self.scale_dim)
+         self._pool = ThreadPoolExecutor(threads, thread_name_prefix="engram-disk")
+         self._capacity = 0
+@@ -1058,7 +1073,9 @@
+     def parameters(self) -> tuple[torch.Tensor, torch.Tensor]:
+         """CPU tensors aliasing the mapped rows (never read by the device)."""
+         return (
+-            torch.from_numpy(self.weight_np).view(torch.float8_e4m3fn),
++            torch.from_numpy(self.weight_np)
++            if self.fp4
++            else torch.from_numpy(self.weight_np).view(torch.float8_e4m3fn),
+             torch.from_numpy(self.scales_np),
+         )
+ 
+@@ -1087,7 +1104,7 @@
+         if rows > self._capacity:
+             self._capacity = max(rows, 2 * self._capacity)
+             self._weight_buf = torch.empty(
+-                (self._capacity, self.dim), dtype=torch.uint8, pin_memory=True
++                (self._capacity, self.stored_dim), dtype=torch.uint8, pin_memory=True
+             )
+             self._scales_buf = torch.empty(
+                 (self._capacity, self.scale_dim), dtype=torch.uint8, pin_memory=True
+@@ -1109,6 +1126,10 @@
+         self._dev_scales = torch.empty(
+             (cap, self.scale_dim), dtype=torch.uint8, device=device
+         )
++        if self.fp4:
++            self._dev_packed = torch.empty(
++                (cap, self.stored_dim), dtype=torch.uint8, device=device
++            )
+         self._dev_ids = torch.full((cap,), -1, dtype=torch.int64, device=device)
+         self._dev_dst = torch.arange(cap, dtype=torch.int32, device=device)
+         self._dev_capacity = cap
+@@ -1149,9 +1170,16 @@
+         np.copyto(ids_buf.numpy(), np.where(owned, np.arange(rows), -1))
+         assert self._dev_weight is not None and self._dev_scales is not None
+         assert self._dev_ids is not None
+-        self._dev_weight[:rows].copy_(
+-            weight_buf.view(torch.float8_e4m3fn), non_blocking=True
+-        )
++        if self.fp4:
++            assert self._dev_packed is not None
++            self._dev_packed[:rows].copy_(weight_buf, non_blocking=True)
++            self._dev_weight[:rows].view(torch.uint8).copy_(
++                self._widen_fp4(self._dev_packed[:rows])
++            )
++        else:
++            self._dev_weight[:rows].copy_(
++                weight_buf.view(torch.float8_e4m3fn), non_blocking=True
++            )
+         self._dev_scales[:rows].copy_(scales_buf, non_blocking=True)
+         self._dev_ids[:rows].copy_(ids_buf, non_blocking=True)
+         if self._copy_done is None:
+@@ -1199,13 +1227,30 @@
+         rows = int(local_rows.shape[0])
+         weight_buf, scales_buf = self._buffers(rows)
+         self._gather_into(local_rows, weight_buf.numpy(), scales_buf.numpy())
+-        weight_dev = weight_buf.to(device, non_blocking=True).view(torch.float8_e4m3fn)
++        if self.fp4:
++            weight_dev = self._widen_fp4(weight_buf.to(device, non_blocking=True)).view(
++                torch.float8_e4m3fn
++            )
++        else:
++            weight_dev = weight_buf.to(device, non_blocking=True).view(torch.float8_e4m3fn)
+         scales_dev = scales_buf.to(device, non_blocking=True)
+         if self._copy_done is None:
+             self._copy_done = torch.cuda.Event()
+         self._copy_done.record(torch.cuda.current_stream())
+         return weight_dev, scales_dev
+ 
++    def _widen_fp4(self, packed: torch.Tensor) -> torch.Tensor:
++        """uint8 [rows, dim/2] packed E2M1 -> uint8 [rows, dim] E4M3 bytes."""
++        if self._fp4_lut is None or self._fp4_lut.device != packed.device:
++            grid = torch.tensor(
++                [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0,
++                 -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0]
++            ).to(torch.float8_e4m3fn).view(torch.uint8)
++            b = torch.arange(256)
++            # byte b -> (element 2i = low nibble, element 2i+1 = high nibble)
++            self._fp4_lut = torch.stack([grid[b & 15], grid[b >> 4]], dim=1).to(packed.device)
++        return self._fp4_lut[packed.long()].view(packed.shape[0], self.dim)
++
+     def _gather_into(
+         self, local_rows: np.ndarray, weight_out: np.ndarray, scales_out: np.ndarray
+     ) -> None:
+@@ -1218,7 +1263,7 @@
+         # ~0.7 ms this way; 2048 rows 20 ms vs 10 ms.
+         uniq = np.unique(local_rows)
+         for mapping, base, width in (
+-            (self._mappings[0], self._view_offsets[0], self.dim),
++            (self._mappings[0], self._view_offsets[0], self.stored_dim),
+             (self._mappings[1], self._view_offsets[1], self.scale_dim),
+         ):
+             starts = base + uniq * width

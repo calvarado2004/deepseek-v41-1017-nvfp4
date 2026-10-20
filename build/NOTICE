@@ -1,0 +1,38 @@
+deepseek-v41-1017 card, build/patches
+
+0001-engram-disk-offload.patch, 0002-sm120-deepseek-v41-page-sizes.patch and
+0003-engram-mxfp4-tables.patch are copied unchanged from
+https://github.com/ondigo-winder/deepseek-v4_1-1017-4-gb10 at commit
+e7b0d33fa3390f645faa952815da78c7e5cd926b:
+
+    Copyright 2026 ondigo-winder
+    Licensed under the Apache License, Version 2.0.
+
+0004-vllm-62196-encoder-1017.patch is the Python part (vllm/tokenizers/) of
+https://github.com/vllm-project/vllm/pull/62196 at head
+9b0ba8ae7846f9cc27c31ef2ab24f546f1244189, rebased without changes onto vLLM
+0cbac6cd1 after 0001-0003.
+
+All four patches modify vLLM (https://github.com/vllm-project/vllm),
+Copyright the vLLM project contributors, licensed under Apache-2.0.
+
+The weights (LibertAIDAI/DeepSeek-V4.1-Flash-1017-NVFP4, from
+deepseek-ai/DeepSeek-V4.1-Flash-1017) are MIT-licensed and are not stored here.
+
+NCCL (optional, DSV41K_NCCL_LIB): built by scripts/build-nccl-4hca.sh from
+NVIDIA NCCL 2.30.7 (BSD-3), alexellis/switchless-nccl v0.0.1 patches and
+ondigo-winder/SWITCHLESS-NCCL-RING-4-GB10 (Apache-2.0). Not vendored here.
+
+Patches 0005-0009 are upstream vLLM pull requests (Apache-2.0), cut to their
+vllm/ source files and rebased onto nightly 0cbac6cd1 + 0001-0004 on 2026-10-20:
+  0005  vllm#58681  DeepGEMM: restore SM12x contiguous-layout alignment 64
+  0006  vllm#61261  draft_context_window for DFlash/DSpark (vllm/config/vllm.py
+                    hunk placed by hand: no #59973 in this nightly)
+  0007  vllm#61161  fresh random draws across block verification rounds
+  0008  vllm#61451  skip bonus-logit reductions for short drafts (kernel hunk
+                    placed by hand: no #60945 bounds check in this nightly)
+  0009  vllm#60792  V4.1 image order follows rendered content (encoder hunks
+                    merged by hand with 0004; 1017 reference still 200/200)
+  0010  ours       InstantTensor loader sends shards holding placeholder
+                    weights (the Engram tables) through the safetensors
+                    iterator, so --load-format instanttensor works with 0001

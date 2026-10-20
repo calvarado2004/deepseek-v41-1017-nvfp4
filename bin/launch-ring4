@@ -1,0 +1,346 @@
+#!/usr/bin/env bash
+
+# Run one rank of DeepSeek-V4.1-Flash-1017 NVFP4 (LibertAIDAI) at TP=4 across
+# the four Sparks cabled in a loop with no switch:
+#
+#   rank 0 -> rank 1 -> rank 2 -> rank 3 -> rank 0 (one QSFP cable each)
+#
+# Engine: vLLM nightly 0cbac6cd1 with ondigo-winder's three patches (Engram
+# from NVMe, sm_12x page sizes, MXFP4 Engram tables) and the 1017 encoder
+# (vllm#62196); see ../build. Differences from ondigo's node.sh:
+#   - the vision tower is on (no --language-model-only); video arrives as
+#     ordered frames through ../overlay/dsv41_video_frames.py;
+#   - stock NCCL with a ring graph written here, not a patched NCCL. Same
+#     approach as the kindling ring4 card (190 Gb/s bus bandwidth measured).
+#
+# Engram: each rank memory-maps its quarter of both tables (24.3 GiB) from the
+# local checkpoint and stages the rows it needs before every step. The loader
+# never reads the tables, so they cost page cache, not resident memory.
+#
+# The fabric must be in the ring layout (../../fabric/apply-layout.sh ring).
+
+set -euo pipefail
+
+TP=4
+NNODES=4
+if [ "$#" -ne 1 ] || [[ ! "$1" =~ ^[0-3]$ ]]; then
+  echo "usage: $0 <node-rank: 0..3>" >&2; exit 2
+fi
+NODE_RANK="$1"
+
+RUNTIME_ROOT="${DSV41K_RUNTIME_ROOT:-/opt/spark-llm/profiles/deepseek-v41-1017}"
+CACHE_ROOT="${DSV41K_CACHE_ROOT:-/var/cache/spark-llm/deepseek-v41-1017}"
+IMAGE="${DSV41K_IMAGE:-spark-dsv41k:0cbac6c-p4}"
+IMAGE_ID_EXPECTED="${DSV41K_IMAGE_ID:-}"
+MODEL_DIR="${DSV41K_MODEL_DIR:-/srv/spark-llm/models/deepseek-v41-1017-nvfp4}"
+MODEL_REVISION="${DSV41K_MODEL_REVISION:-5be99cd15675589fb6693d0a8651e413bcb9a396}"
+MODEL_SHARDS="${DSV41K_MODEL_SHARDS:-48}"
+
+MASTER_ADDR="${DSV41K_MASTER_ADDR:-192.168.100.10}"
+MASTER_PORT="${DSV41K_MASTER_PORT:-29571}"
+PORT="${DSV41K_PORT:-8888}"
+SERVED_MODEL_NAME="${DSV41K_SERVED_MODEL_NAME:-DeepSeek-V4.1-Flash-1017-NVFP4}"
+SSL_CERTFILE="${DSV41K_SSL_CERTFILE:-/etc/ssl/vllm/fullchain.pem}"
+SSL_KEYFILE="${DSV41K_SSL_KEYFILE:-/etc/ssl/vllm/privkey.pem}"
+MEMORY_CAP="${DSV41K_MEMORY_CAP:-115g}"
+
+# ondigo measured at 0.80 / 262144: 77.6 GiB weights, 1,781,324 KV tokens.
+MAX_MODEL_LEN="${DSV41K_MAX_MODEL_LEN:-1048576}"
+GPU_MEM_UTIL="${DSV41K_GPU_MEM_UTIL:-0.80}"
+MAX_NUM_SEQS="${DSV41K_MAX_NUM_SEQS:-16}"
+MAX_NUM_BATCHED_TOKENS="${DSV41K_MAX_NUM_BATCHED_TOKENS:-8192}"
+SPEC_TOKENS="${DSV41K_SPEC_TOKENS:-5}"
+# vLLM's V4.1 recipe: 5 drafts (the trained block), probabilistic drafts,
+# block verification. At T=1.0 vs ondigo's 6 greedy: prose +5-14%, code
+# C1 49.9 -> 56.1 (2026-10-19). Adaptive verification fails at boot here:
+# DeepseekV41IndexerBackend cannot trim verification on device.
+DRAFT_SAMPLE="${DSV41K_DRAFT_SAMPLE:-probabilistic}"
+REJECTION="${DSV41K_REJECTION:-block}"
+ADAPTIVE_VERIFY="${DSV41K_ADAPTIVE_VERIFY:-false}"
+# Target MoE kernel: empty = vLLM auto (flashinfer_cutlass on GB10). flashinfer_b12x
+# is FlashInfer's SM12x NVFP4 kernel, which auto does not consider.
+MOE_BACKEND="${DSV41K_MOE_BACKEND:-}"
+KERNEL_CONFIG='{"enable_flashinfer_autotune":false'"${MOE_BACKEND:+,\"moe_backend\":\"$MOE_BACKEND\"}"'}'
+# Draft attends only to the last N context tokens (vllm#61261, patch 0006):
+# acceptance above 128K context. Empty = whole context.
+DRAFT_CONTEXT_WINDOW="${DSV41K_DRAFT_CONTEXT_WINDOW:-}"
+# --attention-config JSON, e.g. {"indexer_kv_dtype":"mxfp4"}. Empty = vLLM defaults.
+ATTENTION_CONFIG="${DSV41K_ATTENTION_CONFIG:-}"
+ENGRAM_THREADS="${DSV41K_ENGRAM_THREADS:-64}"
+# Images: one cap shared by images and video frames. The middleware cuts
+# frames to fit, so a long clip is a 400 only when the images alone fill it.
+MAX_IMAGES="${DSV41K_MAX_IMAGES:-32}"
+VIDEO_FPS="${DSV41K_VIDEO_FPS:-1.0}"
+VIDEO_MAX_FRAMES="${DSV41K_VIDEO_MAX_FRAMES:-16}"
+MM_CACHE_GB="${DSV41K_MM_PROCESSOR_CACHE_GB:-1}"
+LANGUAGE_MODEL_ONLY="${DSV41K_LANGUAGE_MODEL_ONLY:-0}"
+# Weight load: auto (stock safetensors) or instanttensor (direct I/O with
+# pipelined prefetch, ~5x faster on these boxes; patch 0010 keeps the Engram
+# shards on the placeholder path). InstantTensor keeps ~4 GB per rank for the
+# life of the process and vLLM profiles after the load, so pin the KV pool in
+# bytes with it (DSV41K_KV_CACHE_MEMORY_BYTES); empty = sized by GPU_MEM_UTIL.
+LOAD_FORMAT="${DSV41K_LOAD_FORMAT:-auto}"
+KV_CACHE_MEMORY_BYTES="${DSV41K_KV_CACHE_MEMORY_BYTES:-}"
+# Staging buffer share of free memory; must hold the largest tensor (~1 GiB).
+IT_MAX_FREE_MEM="${DSV41K_INSTANTTENSOR_MAX_FREE_MEM_USAGE:-0.8}"
+# The 1017 model card's sampling, for requests that do not set their own.
+# At 0.6/0.95 the reasoning loops far more often (RSU prompt, 2026-10-19).
+GENERATION_OVERRIDE="${DSV41K_GENERATION_OVERRIDE:-{\"temperature\": 1.0, \"top_p\": 1.0}}"
+
+image_id="$(docker image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null || true)"
+[ -n "$image_id" ] || { echo "image not present on this node: $IMAGE (scripts/build-image.sh)" >&2; exit 1; }
+# One id, or a space-separated list (an image built on each node gets its own id).
+if [ -n "$IMAGE_ID_EXPECTED" ] && [[ " $IMAGE_ID_EXPECTED " != *" $image_id "* ]]; then
+  echo "image id mismatch for $IMAGE: $image_id, pinned $IMAGE_ID_EXPECTED" >&2; exit 1
+fi
+test -f "$MODEL_DIR/model.safetensors.index.json" || { echo "checkpoint missing on this node: $MODEL_DIR" >&2; exit 1; }
+have_rev="$(cat "$MODEL_DIR/.hf-revision" 2>/dev/null || true)"
+[ "$have_rev" = "$MODEL_REVISION" ] || { echo "checkpoint revision ${have_rev:-unknown} on this node, pinned $MODEL_REVISION" >&2; exit 1; }
+shards=$(find "$MODEL_DIR" -maxdepth 1 -name 'model-*-of-*.safetensors' | wc -l)
+[ "$shards" = "$MODEL_SHARDS" ] || { echo "checkpoint has $shards shards, expected $MODEL_SHARDS (Engram rows live in all of them)" >&2; exit 1; }
+for f in dsv41_video_frames.py dsv41_sampling_policy.py; do
+  test -f "$RUNTIME_ROOT/overlay/$f" || { echo "overlay missing: $RUNTIME_ROOT/overlay/$f" >&2; exit 1; }
+done
+
+# ---- per-rank fabric (ring layout, same table as the kindling ring4 card) ----
+#            rank 0 329f     rank 1 355d     rank 2 c049     rank 3 3d38
+host_ip=(192.168.100.10  192.168.100.11  192.168.104.13  192.168.101.12)
+# The netdev that holds host_ip: TCP bootstrap only, RoCE carries the data.
+ifname=(enp1s0f1np1     enp1s0f1np1     enp1s0f0np0     enp1s0f1np1)
+# Root-a netdev of the cage cabled to rank r-1 and to rank r+1.
+prev_if=(enp1s0f0np0    enp1s0f1np1     enp1s0f0np0     enp1s0f0np0)
+next_if=(enp1s0f1np1    enp1s0f0np0     enp1s0f1np1     enp1s0f1np1)
+VLLM_HOST_IP="${host_ip[$NODE_RANK]}"
+FABRIC_IFNAME="${ifname[$NODE_RANK]}"
+PREV_IF="${prev_if[$NODE_RANK]}"
+NEXT_IF="${next_if[$NODE_RANK]}"
+ip -4 -o addr show dev "$FABRIC_IFNAME" | grep -q " $VLLM_HOST_IP/" \
+  || { echo "$FABRIC_IFNAME does not hold $VLLM_HOST_IP: the fabric is not in the ring layout (fabric/apply-layout.sh ring)" >&2; exit 1; }
+
+# ---- NCCL ring graph ---------------------------------------------------------
+# Each cage is two PCI functions on two roots (0000:01:00.x and 0002:01:00.x),
+# each with its own RDMA device. A rank receives from prev on one cage and
+# sends to next on the other, and NCCL cannot infer that wiring (it assumes
+# every NIC reaches every peer). So: list the four devices, and give NCCL a
+# ring whose channel c receives on prev's root c%2 and sends on next's root
+# c%2. Speeds and path types are the ones NCCL computes for its own ring here.
+port_devices() {  # netdev -> its cage's RDMA devices, one per root, by PCI address
+  local bdf fn ib
+  bdf="$(basename "$(readlink -f "/sys/class/net/$1/device")")"; bdf="${bdf#*:}"
+  for fn in $(ls /sys/bus/pci/devices | sort); do
+    [ "${fn#*:}" = "$bdf" ] || continue
+    ib="/sys/bus/pci/devices/$fn/infiniband"
+    [ -d "$ib" ] && ls "$ib"
+  done
+}
+mapfile -t prev_devs < <(port_devices "$PREV_IF")
+mapfile -t next_devs < <(port_devices "$NEXT_IF")
+[ "${#prev_devs[@]}" = 2 ] && [ "${#next_devs[@]}" = 2 ] \
+  || { echo "expected two RDMA devices per cage: prev=${prev_devs[*]} next=${next_devs[*]}" >&2; exit 1; }
+# NCCL numbers the devices of NCCL_IB_HCA in PCI order.
+mapfile -t all_devs < <(for d in "${prev_devs[@]}" "${next_devs[@]}"; do
+  echo "$(basename "$(readlink -f "/sys/class/infiniband/$d/device")") $d"; done | sort -u | awk '{print $2}')
+dev_index() { local i; for i in "${!all_devs[@]}"; do [ "${all_devs[$i]}" = "$1" ] && { echo "$i"; return; }; done; }
+NCHANNELS="${DSV41K_NCCL_CHANNELS:-8}"
+mkdir -p "$CACHE_ROOT"/{root-cache,logs,nccl}
+GRAPH="$CACHE_ROOT/nccl/ring-graph-rank$NODE_RANK.xml"
+{
+  printf '<graphs version="1"><graph id="0" pattern="4" crossnic="1" nchannels="%s" speedintra="0.24" speedinter="0.24" latencyinter="0" typeintra="LOC" typeinter="P2C" samechannels="1">' "$NCHANNELS"
+  for c in $(seq 0 $((NCHANNELS - 1))); do
+    printf '<channel><net dev="%s"/><gpu dev="0"/><net dev="%s"/></channel>' \
+      "$(dev_index "${prev_devs[$((c % 2))]}")" "$(dev_index "${next_devs[$((c % 2))]}")"
+  done
+  printf '</graph></graphs>\n'
+} > "$GRAPH"
+NCCL_HCA="=$(IFS=,; echo "${all_devs[*]}")"
+
+# DeepSeek ships no Jinja template; the V4.1 tokenizer mode encodes the
+# messages itself. vLLM still wants a template file (as in ondigo's recipe).
+TEMPLATE="$CACHE_ROOT/no-merge.jinja"
+[ -f "$TEMPLATE" ] || printf '%s\n' "{% for m in messages %}{{ m['content'] }}{% endfor %}" > "$TEMPLATE"
+
+envs=(
+  -e "VLLM_HOST_IP=$VLLM_HOST_IP"
+  -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1
+  -e VLLM_NO_USAGE_STATS=1 -e DO_NOT_TRACK=1
+  -e VLLM_ENGINE_READY_TIMEOUT_S=3600
+  -e VLLM_ONE_GPU_PER_NODE=1
+  -e PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+  -e "INSTANTTENSOR_MAX_FREE_MEM_USAGE=$IT_MAX_FREE_MEM"
+  # 0001: copy each tensor out of the MAP_PRIVATE mapping on load; without it
+  # the fused-MoE loaders turn file pages into ~27 GiB of anonymous memory per
+  # rank (tonyd2wild's NVFP4 boots all died of it).
+  -e VLLM_SAFETENSORS_CLONE_ON_LOAD=1
+  -e "VLLM_ENGRAM_TIMING=${DSV41K_ENGRAM_TIMING:-0}"
+  -e VLLM_CACHE_ROOT=/root/.cache/vllm
+  -e TRITON_CACHE_DIR=/root/.cache/triton
+  -e VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR=/tmp/flashinfer_autotune
+  -e MAX_JOBS=4
+  # NCCL on the ring (see the graph above). Subnet-aware routing: with the graph
+  # alone stock NCCL used one device per channel for both directions
+  # (ibv_modify_qp 110, kindling ring4, 2026-10-10).
+  -e "NCCL_IB_HCA=$NCCL_HCA" -e NCCL_IB_MERGE_NICS=0
+  -e NCCL_ALGO=Ring -e NCCL_CROSS_NIC=1
+  -e NCCL_IB_ADDR_FAMILY=AF_INET -e NCCL_IB_ROCE_VERSION_NUM=2
+  -e NCCL_IB_SUBNET_AWARE_ROUTING=1 -e NCCL_IB_SUBNET_PREFIX_LEN=24
+  # Never NCCL_CUMEM_ENABLE=0 here: without cuMem NCCL connects every channel
+  # at init, trees too, before it reads NCCL_ALGO, and the tree pairs rank 0
+  # with rank 2, which share no cable (ibv_modify_qp 110, 2026-10-19). With
+  # cuMem it connects at the first collective, rings only. Same NCCL set as
+  # the kindling ring4 card otherwise.
+  -e "NCCL_MAX_NCHANNELS=$NCHANNELS" -e NCCL_NVLS_ENABLE=0
+  -e "NCCL_SOCKET_IFNAME=$FABRIC_IFNAME" -e "GLOO_SOCKET_IFNAME=$FABRIC_IFNAME"
+  -e "NCCL_DEBUG=${DSV41K_NCCL_DEBUG:-WARN}"
+  # Video middleware (rank 0 only serves HTTP, harmless elsewhere)
+  -e PYTHONPATH=/opt/dsv41k-overlay
+  -e "DSV41_VIDEO_MAX_IMAGES=$MAX_IMAGES"
+  -e "DSV41_VIDEO_FPS=$VIDEO_FPS"
+  -e "DSV41_VIDEO_MAX_FRAMES=$VIDEO_MAX_FRAMES"
+)
+
+serve_args=(
+  /models/deepseek-v41-1017-nvfp4
+  --served-model-name "$SERVED_MODEL_NAME"
+  --tensor-parallel-size "$TP"
+  --distributed-executor-backend mp
+  --nnodes "$NNODES" --node-rank "$NODE_RANK"
+  --master-addr "$MASTER_ADDR" --master-port "$MASTER_PORT"
+  --max-model-len "$MAX_MODEL_LEN"
+  --gpu-memory-utilization "$GPU_MEM_UTIL"
+  --load-format "$LOAD_FORMAT"
+  --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
+  --max-num-seqs "$MAX_NUM_SEQS"
+  --trust-remote-code
+  --enable-prompt-tokens-details
+  --kernel-config "$KERNEL_CONFIG"
+  --chat-template /root/.cache/no-merge.jinja
+  --engram-config "{\"disk_offload\": true, \"disk_offload_threads\": $ENGRAM_THREADS}"
+  --reasoning-parser deepseek_v41
+  --override-generation-config "$GENERATION_OVERRIDE"
+  --enable-auto-tool-choice --tool-call-parser deepseek_v41
+  --host 0.0.0.0 --port "$PORT"
+)
+if [ "$LANGUAGE_MODEL_ONLY" = 1 ]; then
+  serve_args+=(--language-model-only)
+else
+  serve_args+=(--limit-mm-per-prompt "{\"image\":$MAX_IMAGES}" --mm-processor-cache-gb "$MM_CACHE_GB")
+fi
+if [ "$NODE_RANK" = 0 ]; then
+  serve_args+=(--ssl-certfile "$SSL_CERTFILE" --ssl-keyfile "$SSL_KEYFILE")
+  [ "$LANGUAGE_MODEL_ONLY" = 1 ] || serve_args+=(--middleware dsv41_video_frames.VideoFramesMiddleware)
+  serve_args+=(--middleware dsv41_sampling_policy.SamplingPolicyMiddleware)
+else
+  serve_args+=(--headless)
+fi
+# shellcheck disable=SC2206
+# DSV41K_SPEC_TOKENS=0 serves without DSpark (A/B for output quality).
+[ "$SPEC_TOKENS" = 0 ] || serve_args+=(--speculative-config "{\"method\":\"dspark\",\"num_speculative_tokens\":$SPEC_TOKENS,\"draft_sample_method\":\"$DRAFT_SAMPLE\",\"rejection_sample_method\":\"$REJECTION\",\"enable_adaptive_verification\":$ADAPTIVE_VERIFY${DRAFT_CONTEXT_WINDOW:+,\"draft_context_window\":$DRAFT_CONTEXT_WINDOW}}")
+[ -n "$ATTENTION_CONFIG" ] && serve_args+=(--attention-config "$ATTENTION_CONFIG")
+[ -n "$KV_CACHE_MEMORY_BYTES" ] && serve_args+=(--kv-cache-memory-bytes "$KV_CACHE_MEMORY_BYTES")
+[ -n "${DSV41K_EXTRA_ARGS:-}" ] && serve_args+=(${DSV41K_EXTRA_ARGS})
+
+NAME="dsv41k-rank$NODE_RANK"
+docker rm -f "$NAME" >/dev/null 2>&1 || true
+docker_args=(
+  run --rm --name "$NAME"
+  --gpus all --network host --ipc host --shm-size 32g
+  --memory "$MEMORY_CAP" --memory-swap "$MEMORY_CAP"
+  --ulimit memlock=-1:-1 --ulimit stack=67108864 --ulimit core=0 --cap-add IPC_LOCK
+  --device /dev/infiniband:/dev/infiniband
+  -v "$MODEL_DIR:/models/deepseek-v41-1017-nvfp4:ro"
+  -v "$CACHE_ROOT/root-cache:/root/.cache"
+  -v "$TEMPLATE:/root/.cache/no-merge.jinja:ro"
+  -v "$CACHE_ROOT/nccl:/nccl:ro"
+  -v "$CACHE_ROOT/logs:/logs"
+  -v "$RUNTIME_ROOT/overlay:/opt/dsv41k-overlay:ro"
+  "${envs[@]}"
+  --entrypoint vllm
+)
+# NCCL: stock (the image's) with the ring graph above, or, with DSV41K_NCCL_LIB
+# set to a directory holding libnccl.so.2, ondigo-winder's switchless 4-HCA
+# build (SWITCHLESS-NCCL-RING-4-GB10, Apache-2.0) with its required settings.
+# Every rank must run the same one.
+NCCL_LIB="${DSV41K_NCCL_LIB:-}"
+if [ -n "$NCCL_LIB" ]; then
+  test -f "$NCCL_LIB/libnccl.so.2" || { echo "DSV41K_NCCL_LIB: no libnccl.so.2 in $NCCL_LIB" >&2; exit 1; }
+  docker_args+=(-v "$NCCL_LIB:/opt/nccl-4hca:ro"
+    -e LD_PRELOAD=/opt/nccl-4hca/libnccl.so.2 -e VLLM_NCCL_SO_PATH=/opt/nccl-4hca/libnccl.so.2
+    -e NCCL_SWITCHLESS_RING_ONLY=1 -e NCCL_IB_GID_INDEX=3 -e "NCCL_MIN_NCHANNELS=$NCHANNELS")
+else
+  docker_args+=(-e "NCCL_GRAPH_FILE=/nccl/ring-graph-rank$NODE_RANK.xml")
+fi
+
+# arx (kindlingai/glm-5.3-flash-gx10, experimental/arx): RDMA all-reduce for
+# decode-sized tensors on the ring, NCCL for the rest. The overlay is built on
+# the Sparks by scripts/build-arx-overlay.sh, never kept in this repo. arx opens
+# queue pairs to rank r-1 on prev's two devices and to r+1 on next's two (the
+# same cage devices as the NCCL graph), each with its own IPv4 RoCE v2 GID.
+# arxbig stays off: it serves sequence-parallel gathers, which V4.1 does not use.
+ARX="${DSV41K_ARX:-0}"
+ARX_DIR="${DSV41K_ARX_DIR:-$RUNTIME_ROOT/arx}"
+if [ "$ARX" = 1 ]; then
+  for f in cuda_communicator.py arx.py arx_vllm.cu arxbig.cu; do
+    test -f "$ARX_DIR/$f" || { echo "arx overlay missing $ARX_DIR/$f (scripts/build-arx-overlay.sh)" >&2; exit 1; }
+  done
+  D=/usr/local/lib/python3.12/dist-packages/vllm/distributed/device_communicators
+  for f in cuda_communicator.py arx.py arx_vllm.cu arxbig.cu; do
+    docker_args+=(-v "$ARX_DIR/$f:$D/$f:ro")
+  done
+  docker_args+=(-v "$ARX_DIR/include:/opt/arx-include:ro" -e CPATH=/opt/arx-include
+    -e VLLM_ARX_ALLREDUCE=1 -e VLLM_ARX_RING=1 -e VLLM_ARXBIG=0
+    -e "ARX_RING_PREV_HCAS=$(IFS=,; echo "${prev_devs[*]}")"
+    -e "ARX_RING_NEXT_HCAS=$(IFS=,; echo "${next_devs[*]}")"
+    -e "VLLM_ARX_TWO_SHOT_MAX_KB=${DSV41K_ARX_TWO_SHOT_MAX_KB:-2048}")
+fi
+
+[ "$NODE_RANK" = 0 ] && docker_args+=(-v "$(dirname "$SSL_CERTFILE"):$(dirname "$SSL_CERTFILE"):ro")
+
+echo "DeepSeek-V4.1-Flash-1017 NVFP4 ring tp=$TP rank=$NODE_RANK host_ip=$VLLM_HOST_IP prev=$PREV_IF(${prev_devs[*]}) next=$NEXT_IF(${next_devs[*]})" \
+     "hca=$NCCL_HCA image=$IMAGE ($image_id) model_rev=${MODEL_REVISION:0:8}" \
+     "context=$MAX_MODEL_LEN util=$GPU_MEM_UTIL seqs=$MAX_NUM_SEQS spec=$SPEC_TOKENS images=$MAX_IMAGES lm_only=$LANGUAGE_MODEL_ONLY"
+
+if [ -z "${NOTIFY_SOCKET:-}" ]; then
+  exec docker "${docker_args[@]}" "$IMAGE" serve "${serve_args[@]}"
+fi
+
+docker "${docker_args[@]}" "$IMAGE" serve "${serve_args[@]}" &
+container_pid=$!
+
+# Rank 0 gates readiness on its own endpoint; headless ranks report ready once
+# their container runs (gating them on the head deadlocks a start that waits on every unit).
+if [ "$NODE_RANK" != 0 ]; then
+  (
+    for _ in $(seq 1 60); do
+      kill -0 "$container_pid" 2>/dev/null || exit 0
+      if [ "$(docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null)" = true ]; then
+        systemd-notify --ready --status="headless rank $NODE_RANK, at the rendezvous for rank 0"; exit 0
+      fi
+      sleep 2
+    done
+    systemd-notify --ready --status="headless rank $NODE_RANK, container not running after 120s"
+  ) &
+  wait "$container_pid"; exit $?
+fi
+
+(
+  health="https://127.0.0.1:${PORT}/health"
+  deadline=$(( $(date +%s) + ${DSV41K_READY_TIMEOUT:-3600} ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    kill -0 "$container_pid" 2>/dev/null || exit 0
+    if curl -sk -m 5 -o /dev/null -f "$health" 2>/dev/null; then
+      # Compile the concurrent batch shapes before anyone can send a burst.
+      body="{\"model\":\"$SERVED_MODEL_NAME\",\"messages\":[{\"role\":\"user\",\"content\":\"Count from 1 to 20.\"}],\"max_tokens\":32,\"chat_template_kwargs\":{\"thinking\":false}}"
+      for _ in 1 2 3 4; do
+        curl -sk -m 900 -o /dev/null -H 'Content-Type: application/json' -d "$body" \
+          "https://127.0.0.1:${PORT}/v1/chat/completions" &
+      done
+      wait
+      kill -0 "$container_pid" 2>/dev/null || exit 0
+      systemd-notify --ready --status="serving on :${PORT}"; exit 0
+    fi
+    systemd-notify --status="loading (rank 0)"
+    sleep 10
+  done
+  systemd-notify --status="not ready after ${DSV41K_READY_TIMEOUT:-3600}s"
+) &
+wait "$container_pid"

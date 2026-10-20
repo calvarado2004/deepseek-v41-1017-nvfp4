@@ -1,0 +1,209 @@
+diff --git a/vllm/renderers/deepseek_v4.py b/vllm/renderers/deepseek_v4.py
+index 470e21f..b468d51 100644
+--- a/vllm/renderers/deepseek_v4.py
++++ b/vllm/renderers/deepseek_v4.py
+@@ -34,7 +34,23 @@ class DeepseekV4Renderer(BaseRenderer[DeepseekV4Tokenizer]):
+         )
+ 
+     def _apply_chat_template(self, *args, **kwargs):
+-        return self.get_tokenizer().apply_chat_template(*args, **kwargs)
++        return self.get_tokenizer().apply_chat_template(*args, **kwargs), None
++
++    def _build_prompt(self, rendered, mm_data, mm_uuids) -> DictPrompt:
++        prompt_raw, image_order = rendered
++        prompt = parse_dec_only_prompt(prompt_raw)
++        if image_order is not None:
++            for items in (mm_data, mm_uuids):
++                if items is not None and "image" in items:
++                    if image_order:
++                        items["image"] = [items["image"][i] for i in image_order]
++                    else:
++                        del items["image"]
++        if mm_data:
++            prompt["multi_modal_data"] = mm_data
++        if mm_uuids:
++            prompt["multi_modal_uuids"] = mm_uuids
++        return prompt
+ 
+     def render_completion_suffix(self, prompt: str, suffix: str) -> str | None:
+         return f"{_FIM_BEGIN}{prompt}{_FIM_HOLE}{suffix}{_FIM_END}"
+@@ -52,19 +68,13 @@ class DeepseekV4Renderer(BaseRenderer[DeepseekV4Tokenizer]):
+             mm_processor_kwargs=params.mm_processor_kwargs,
+         )
+ 
+-        prompt_raw = self._apply_chat_template(
++        rendered = self._apply_chat_template(
+             conversation=conversation,
+             messages=messages,
+             **params.get_apply_chat_template_kwargs(),
+         )
+ 
+-        prompt = parse_dec_only_prompt(prompt_raw)
+-        if mm_data is not None:
+-            prompt["multi_modal_data"] = mm_data
+-        if mm_uuids is not None:
+-            prompt["multi_modal_uuids"] = mm_uuids
+-
+-        return conversation, prompt
++        return conversation, self._build_prompt(rendered, mm_data, mm_uuids)
+ 
+     async def render_messages_async(
+         self,
+@@ -79,16 +89,18 @@ class DeepseekV4Renderer(BaseRenderer[DeepseekV4Tokenizer]):
+             mm_processor_kwargs=params.mm_processor_kwargs,
+         )
+ 
+-        prompt_raw = await self._apply_chat_template_async(
++        rendered = await self._apply_chat_template_async(
+             conversation=conversation,
+             messages=messages,
+             **params.get_apply_chat_template_kwargs(),
+         )
+ 
+-        prompt = parse_dec_only_prompt(prompt_raw)
+-        if mm_data is not None:
+-            prompt["multi_modal_data"] = mm_data
+-        if mm_uuids is not None:
+-            prompt["multi_modal_uuids"] = mm_uuids
++        return conversation, self._build_prompt(rendered, mm_data, mm_uuids)
++
+ 
+-        return conversation, prompt
++class DeepseekV41Renderer(DeepseekV4Renderer):
++    def _apply_chat_template(self, *args, **kwargs):
++        image_order: list[int] = []
++        kwargs["image_order"] = image_order
++        prompt_raw = self.get_tokenizer().apply_chat_template(*args, **kwargs)
++        return prompt_raw, image_order
+diff --git a/vllm/renderers/registry.py b/vllm/renderers/registry.py
+index 740c202..f4fc452 100644
+--- a/vllm/renderers/registry.py
++++ b/vllm/renderers/registry.py
+@@ -23,7 +23,7 @@ _VLLM_RENDERERS = {
+     "cohere": ("cohere", "CohereRenderer"),
+     "deepseek_v32": ("deepseek_v32", "DeepseekV32Renderer"),
+     "deepseek_v4": ("deepseek_v4", "DeepseekV4Renderer"),
+-    "deepseek_v41": ("deepseek_v4", "DeepseekV4Renderer"),
++    "deepseek_v41": ("deepseek_v4", "DeepseekV41Renderer"),
+     "hf": ("hf", "HfRenderer"),
+     "kimi_audio": ("hf", "HfRenderer"),
+     "kimi_k3": ("kimi_k3", "KimiK3Renderer"),
+diff --git a/vllm/tokenizers/deepseek_v41.py b/vllm/tokenizers/deepseek_v41.py
+index 4d6499b..31ce347 100644
+--- a/vllm/tokenizers/deepseek_v41.py
++++ b/vllm/tokenizers/deepseek_v41.py
+@@ -29,7 +29,9 @@ def _normalize_messages(
+     messages: list[ChatCompletionMessageParam],
+ ) -> list[dict[str, Any]]:
+     result = [dict(message) for message in copy.deepcopy(messages)]
++    image_idx = 0
+     for message in result:
++        image_indices = message["_image_indices"] = []
+         role = message.get("role")
+         if role not in ("system", "developer", "user", "assistant", "tool"):
+             raise ValueError(f"Invalid role: {role}")
+@@ -49,6 +51,8 @@ def _normalize_messages(
+                     parts.append(text)
+                 elif part_type in ("image_url", "input_image", "image_pil"):
+                     parts.append(IMAGE_PLACEHOLDER)
++                    image_indices.append(image_idx)
++                    image_idx += 1
+                 else:
+                     raise ValueError(
+                         "DeepSeek V4.1 supports text and image content only; "
+@@ -68,6 +72,7 @@ def get_deepseek_v41_tokenizer(tokenizer: HfTokenizer) -> HfTokenizer:
+             self,
+             messages: list[ChatCompletionMessageParam],
+             tools: list[dict[str, Any]] | None = None,
++            image_order: list[int] | None = None,
+             **kwargs,
+         ) -> str | list[int]:
+             # The generic renderer's conversation has already flattened text
+@@ -103,6 +108,7 @@ def get_deepseek_v41_tokenizer(tokenizer: HfTokenizer) -> HfTokenizer:
+                 thinking_mode="thinking" if thinking else "chat",
+                 drop_thinking=kwargs.get("drop_thinking", True),
+                 reasoning_effort=effort,
++                image_order=image_order,
+             )
+             if kwargs.get("tokenize", True):
+                 tokenizer_kwargs = {
+diff --git a/vllm/tokenizers/deepseek_v41_encoding.py b/vllm/tokenizers/deepseek_v41_encoding.py
+index 345b2ef..8122833 100644
+--- a/vllm/tokenizers/deepseek_v41_encoding.py
++++ b/vllm/tokenizers/deepseek_v41_encoding.py
+@@ -92,6 +92,7 @@ def merge_tool_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+                 "type": "tool_result",
+                 "tool_use_id": msg.get("tool_call_id", ""),
+                 "content": content,
++                "_image_indices": msg.get("_image_indices", []),
+             }
+             # Merge into previous message if it's already a user (merged tool)
+             if (
+@@ -111,11 +112,22 @@ def merge_tool_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+             content_blocks = msg.get("content_blocks")
+             if content_blocks is None:
+                 content = msg.get("content", "")
+-                content_blocks = (
+-                    content
+-                    if isinstance(content, list)
+-                    else [{"type": "text", "text": content}]
+-                )
++                if isinstance(content, list):
++                    # Structured content: carry the message's image indices on
++                    # its first text block (render_message reads them there).
++                    content_blocks = [dict(b) for b in content]
++                    for b in content_blocks:
++                        if b.get("type") in ("text", "tool_result"):
++                            b["_image_indices"] = msg.get("_image_indices", [])
++                            break
++                else:
++                    content_blocks = [
++                        {
++                            "type": "text",
++                            "text": content,
++                            "_image_indices": msg.get("_image_indices", []),
++                        }
++                    ]
+             if (
+                 merged
+                 and merged[-1].get("role") == "user"
+@@ -328,6 +340,7 @@ def render_message(
+     drop_thinking: bool = True,
+     reasoning_effort: Union[str, int, None] = None,
+     last_user_idx: Optional[int] = None,
++    image_order: Optional[List[int]] = None,
+ ) -> str:
+     """
+     Render a single message at the given index into its V4.1 encoded string form.
+@@ -350,6 +363,15 @@ def render_message(
+     reasoning_content = msg.get("reasoning_content")
+     wo_eos = msg.get("wo_eos", False)
+ 
++    # Collect source indices only from content that survives preprocessing.
++    if image_order is not None:
++        if role == "user" and msg.get("content_blocks"):
++            for block in msg["content_blocks"]:
++                if block.get("type") in ("text", "tool_result"):
++                    image_order.extend(block.get("_image_indices", []))
++        else:
++            image_order.extend(msg.get("_image_indices", []))
++
+     if tools:
+         tools = tools_from_openai_format(tools)
+     if tool_calls:
+@@ -555,6 +577,7 @@ def encode_messages(
+     drop_thinking: bool = True,
+     add_default_bos_token: bool = True,
+     reasoning_effort: Union[str, int, None] = None,
++    image_order: Optional[List[int]] = None,
+ ) -> str:
+     """Encode preprocessed (text-only) messages into the V4.1 prompt format."""
+     # Preprocess: merge tool messages and sort tool results
+@@ -589,6 +612,7 @@ def encode_messages(
+             drop_thinking=effective_drop_thinking,
+             reasoning_effort=reasoning_effort,
+             last_user_idx=last_user_idx,
++            image_order=image_order,
+         )
+ 
+     return prompt

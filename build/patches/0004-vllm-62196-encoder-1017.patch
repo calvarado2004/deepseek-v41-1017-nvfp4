@@ -1,0 +1,143 @@
+diff --git a/vllm/tokenizers/deepseek_v41.py b/vllm/tokenizers/deepseek_v41.py
+index a1449e5..4d6499b 100644
+--- a/vllm/tokenizers/deepseek_v41.py
++++ b/vllm/tokenizers/deepseek_v41.py
+@@ -17,6 +17,14 @@ from .hf import HfTokenizer, get_cached_tokenizer
+ from .protocol import TokenizerLike
+ 
+ 
++def _reject_image_placeholder(text: Any) -> None:
++    if isinstance(text, str) and IMAGE_PLACEHOLDER in text:
++        raise ValueError(
++            f"DeepSeek V4.1 message text must not contain {IMAGE_PLACEHOLDER!r}; "
++            "send images as image content parts"
++        )
++
++
+ def _normalize_messages(
+     messages: list[ChatCompletionMessageParam],
+ ) -> list[dict[str, Any]]:
+@@ -27,13 +35,18 @@ def _normalize_messages(
+             raise ValueError(f"Invalid role: {role}")
+         if "reasoning" in message:
+             message["reasoning_content"] = message["reasoning"]
++        # Validate every message before image parts become placeholders.
++        _reject_image_placeholder(message.get("reasoning_content"))
+         content = message.get("content")
++        _reject_image_placeholder(content)
+         if isinstance(content, list):
+             parts = []
+             for block in content:
+                 part_type = block.get("type")
+                 if part_type in ("text", "input_text", "output_text"):
+-                    parts.append(block.get("text", ""))
++                    text = block.get("text", "")
++                    _reject_image_placeholder(text)
++                    parts.append(text)
+                 elif part_type in ("image_url", "input_image", "image_pil"):
+                     parts.append(IMAGE_PLACEHOLDER)
+                 else:
+diff --git a/vllm/tokenizers/deepseek_v41_encoding.py b/vllm/tokenizers/deepseek_v41_encoding.py
+index 6851d42..345b2ef 100644
+--- a/vllm/tokenizers/deepseek_v41_encoding.py
++++ b/vllm/tokenizers/deepseek_v41_encoding.py
+@@ -85,10 +85,13 @@ def merge_tool_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+ 
+         if role == "tool":
+             # Convert tool message to a user message with tool_result block
++            content = msg.get("content", "")
++            if msg.get("content_blocks") and not isinstance(msg.get("content"), str):
++                content = msg["content_blocks"]
+             tool_block = {
+                 "type": "tool_result",
+                 "tool_use_id": msg.get("tool_call_id", ""),
+-                "content": msg.get("content", ""),
++                "content": content,
+             }
+             # Merge into previous message if it's already a user (merged tool)
+             if (
+@@ -107,7 +110,12 @@ def merge_tool_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+         elif role == "user":
+             content_blocks = msg.get("content_blocks")
+             if content_blocks is None:
+-                content_blocks = [{"type": "text", "text": msg.get("content", "")}]
++                content = msg.get("content", "")
++                content_blocks = (
++                    content
++                    if isinstance(content, list)
++                    else [{"type": "text", "text": content}]
++                )
+             if (
+                 merged
+                 and merged[-1].get("role") == "user"
+@@ -296,11 +304,18 @@ def find_last_user_index(messages: List[Dict[str, Any]]) -> int:
+ 
+     V4.1 supports mid-conversation system messages, which count as user
+     messages for the purposes of the assistant generation header.
++    User messages containing only tool results do not start a new turn.
+     """
+     last_user_index = -1
+     for idx in range(len(messages) - 1, -1, -1):
+         role = messages[idx].get("role")
+         if role in ["user", "developer"] or (role == "system" and idx > 0):
++            content_blocks = messages[idx].get("content_blocks")
++            if content_blocks and not any(
++                block.get("type") in ("text", "image", "image_url")
++                for block in content_blocks
++            ):
++                continue
+             last_user_index = idx
+             break
+     return last_user_index
+@@ -312,6 +327,7 @@ def render_message(
+     thinking_mode: str,
+     drop_thinking: bool = True,
+     reasoning_effort: Union[str, int, None] = None,
++    last_user_idx: Optional[int] = None,
+ ) -> str:
+     """
+     Render a single message at the given index into its V4.1 encoded string form.
+@@ -322,7 +338,9 @@ def render_message(
+     )
+ 
+     msg = messages[index]
+-    last_user_idx = find_last_user_index(messages)
++    last_user_idx = (
++        find_last_user_index(messages) if last_user_idx is None else last_user_idx
++    )
+ 
+     role = msg.get("role")
+     content = msg.get("content")
+@@ -539,14 +557,10 @@ def encode_messages(
+     reasoning_effort: Union[str, int, None] = None,
+ ) -> str:
+     """Encode preprocessed (text-only) messages into the V4.1 prompt format."""
+-    context = context if context else []
+-
+     # Preprocess: merge tool messages and sort tool results
++    context = merge_tool_messages(context or [])
+     messages = merge_tool_messages(messages)
+     messages = sort_tool_results_by_call_order(context + messages)[len(context) :]
+-    if context:
+-        context = merge_tool_messages(context)
+-        context = sort_tool_results_by_call_order(context)
+ 
+     full_messages = context + messages
+ 
+@@ -565,6 +579,8 @@ def encode_messages(
+         num_to_render = len(messages)
+         context_len = len(context)
+ 
++    last_user_idx = find_last_user_index(full_messages)
++
+     for idx in range(num_to_render):
+         prompt += render_message(
+             idx + context_len,
+@@ -572,6 +588,7 @@ def encode_messages(
+             thinking_mode=thinking_mode,
+             drop_thinking=effective_drop_thinking,
+             reasoning_effort=reasoning_effort,
++            last_user_idx=last_user_idx,
+         )
+ 
+     return prompt

@@ -1,0 +1,97 @@
+diff --git a/vllm/v1/worker/gpu/sample/gumbel.py b/vllm/v1/worker/gpu/sample/gumbel.py
+index a34169b..9ab0579 100644
+--- a/vllm/v1/worker/gpu/sample/gumbel.py
++++ b/vllm/v1/worker/gpu/sample/gumbel.py
+@@ -70,6 +70,12 @@ def tl_rand32(seed, offset, includes_zero: tl.constexpr):
+     return u
+ 
+ 
++@triton.jit
++def spec_step_seed(seed, step):
++    """Mix a speculative step into the high bits of a request seed."""
++    return seed ^ (tl.cast(step, tl.int64) << 32)
++
++
+ @triton.jit
+ def _murmur3_rotl32(value, shift: tl.constexpr):
+     return (value << shift) | (value >> (32 - shift))
+@@ -257,6 +263,8 @@ def gumbel_block_argmax(
+ 
+     seed = tl.load(seeds_ptr + req_state_idx, mask=is_valid_req, other=0)
+     pos = tl.load(pos_ptr + token_idx)
++    if logits_cache_ptr is not None:
++        seed = spec_step_seed(seed, col)
+     return gumbel_noised_argmax(
+         logits,
+         block,
+diff --git a/vllm/v1/worker/gpu/sample/watermark.py b/vllm/v1/worker/gpu/sample/watermark.py
+index 216d189..d366b76 100644
+--- a/vllm/v1/worker/gpu/sample/watermark.py
++++ b/vllm/v1/worker/gpu/sample/watermark.py
+@@ -25,7 +25,7 @@ from vllm.v1.watermarking.prfs.philox import (
+ from vllm.v1.watermarking.prfs.philox import (
+     _UINT32_MASK as _UINT32_MASK_VALUE,
+ )
+-from vllm.v1.worker.gpu.sample.gumbel import gumbel_noised_argmax
++from vllm.v1.worker.gpu.sample.gumbel import gumbel_noised_argmax, spec_step_seed
+ 
+ if HAS_TRITON:
+     from triton.language import math as tl_math
+@@ -644,6 +644,8 @@ def _philox_gumbel_kernel(
+             )
+             seed = tl.load(seeds_ptr + req_state_idx, mask=valid_req, other=0)
+             pos = tl.load(pos_ptr + row)
++            if logits_cache_ptr is not None:
++                seed = spec_step_seed(seed, col)
+             logits_row = logits_ptr + row * logits_stride
+             logits = tl.load(logits_row + candidate, mask=mask, other=float("-inf")).to(
+                 tl.float32
+diff --git a/vllm/v1/worker/gpu/spec_decode/dflash2/speculator.py b/vllm/v1/worker/gpu/spec_decode/dflash2/speculator.py
+index bb14621..110a2b3 100644
+--- a/vllm/v1/worker/gpu/spec_decode/dflash2/speculator.py
++++ b/vllm/v1/worker/gpu/spec_decode/dflash2/speculator.py
+@@ -8,7 +8,7 @@ import torch
+ from vllm.config import VllmConfig
+ from vllm.config.compilation import CUDAGraphMode
+ from vllm.triton_utils import tl, triton
+-from vllm.v1.worker.gpu.sample.gumbel import gumbel_noised_argmax
++from vllm.v1.worker.gpu.sample.gumbel import gumbel_noised_argmax, spec_step_seed
+ from vllm.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
+ 
+ 
+@@ -58,7 +58,7 @@ def _selector_walk_kernel(
+             scores,
+             candidates,
+             mask & valid,
+-            seed,
++            spec_step_seed(seed, step),
+             sample_pos,
+             temperature if SAMPLE_PROBABILISTIC else 0.0,
+             IS_DRAFTING=True,
+diff --git a/vllm/v1/worker/gpu/spec_decode/rejection_sampler_utils.py b/vllm/v1/worker/gpu/spec_decode/rejection_sampler_utils.py
+index b2efa64..60530c5 100644
+--- a/vllm/v1/worker/gpu/spec_decode/rejection_sampler_utils.py
++++ b/vllm/v1/worker/gpu/spec_decode/rejection_sampler_utils.py
+@@ -3,7 +3,11 @@
+ import torch
+ 
+ from vllm.triton_utils import tl, tldevice, triton
+-from vllm.v1.worker.gpu.sample.gumbel import gumbel_block_argmax, tl_rand32
++from vllm.v1.worker.gpu.sample.gumbel import (
++    gumbel_block_argmax,
++    spec_step_seed,
++    tl_rand32,
++)
+ from vllm.v1.worker.gpu.sample.watermark import philox_gumbel_block_argmax
+ 
+ 
+@@ -566,7 +570,8 @@ def _rejection_kernel(
+             verifying &= is_valid_draft
+         if verifying:
+             pos = tl.load(pos_ptr + logit_idx)
+-            u = tl_rand32(seed, pos, includes_zero=False)
++            step_seed = spec_step_seed(seed, i) if USE_BLOCK_VERIFICATION else seed
++            u = tl_rand32(step_seed, pos, includes_zero=False)
+             if is_greedy:
+                 # Greedy sampling. Accept IFF draft matches target argmax.
+                 # NOTE: Target argmax is stored directly so that resampling

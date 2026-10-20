@@ -1,0 +1,34 @@
+[Unit]
+Description=vLLM DeepSeek-V4.1-Flash-1017 NVFP4, TP=4 on the four-Spark ring (node rank %i of 4) on DGX Spark
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+# Add Conflicts= for any other model unit that uses the same GPUs.
+StartLimitBurst=0
+
+[Service]
+# notify: rank 0 holds "activating" until /health answers and the warm burst
+# is done; headless ranks report ready once their container runs.
+Type=notify
+NotifyAccess=all
+# The account from cluster.env (SPARK_USER); it must be in the docker group.
+User=spark
+Group=spark
+WorkingDirectory=/opt/spark-llm/profiles/deepseek-v41-1017
+EnvironmentFile=-/etc/spark-llm/profiles/deepseek-v41-1017.env
+# GB10 allocations need MemFree, not MemAvailable: drop clean page cache first.
+ExecStartPre=+/bin/sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches'
+# Rank 0 waits for its three ring peers (SPARK_RING_PEERS in cluster.env).
+ExecStartPre=/bin/bash -c 'if [ "%i" = "0" ]; then for peer in 192.168.100.11 192.168.104.13 192.168.101.12; do for i in $(seq 1 150); do ping -c1 -W1 $$peer >/dev/null 2>&1 && continue 2; sleep 2; done; echo "peer $$peer unreachable after 300s" >&2; exit 1; done; fi'
+ExecStartPre=-/usr/bin/docker rm -f dsv41k-rank%i
+ExecStart=/opt/spark-llm/profiles/deepseek-v41-1017/bin/launch-ring4 %i
+ExecStop=-/usr/bin/docker stop --timeout 20 dsv41k-rank%i
+ExecStop=-/usr/bin/docker kill dsv41k-rank%i
+ExecStopPost=-/usr/bin/docker rm -f dsv41k-rank%i
+
+TimeoutStartSec=7200
+WatchdogSec=0
+TimeoutStopSec=90
+KillMode=control-group
+
+# NO [Install] SECTION, DELIBERATELY: an inference unit must never be enabled
+# or start at boot (a model that starts at boot fills unified memory before anything else can).

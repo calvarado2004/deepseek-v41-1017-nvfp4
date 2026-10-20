@@ -1,0 +1,23 @@
+diff --git a/vllm/model_executor/model_loader/weight_utils.py b/vllm/model_executor/model_loader/weight_utils.py
+--- a/vllm/model_executor/model_loader/weight_utils.py
++++ b/vllm/model_executor/model_loader/weight_utils.py
+@@ -1394,6 +1394,19 @@
+ 
+     device = current_platform.current_device()
+ 
++    # Shards holding placeholder weights (DeepSeek-V4.1's Engram tables, kept
++    # on disk by the Engram disk offload) go through the safetensors iterator,
++    # which yields an empty placeholder for those names and loads the shards'
++    # other tensors as usual; InstantTensor would read the tables in full. The
++    # list is the same on every rank, so InstantTensor's collective open still
++    # sees one file set.
++    placeholder_files = [f for f in hf_weights_files if _has_placeholder_weights(f)]
++    if placeholder_files:
++        hf_weights_files = [f for f in hf_weights_files if f not in placeholder_files]
++        yield from safetensors_weights_iterator(placeholder_files, use_tqdm_on_load)
++        if not hf_weights_files:
++            return
++
+     # copy=True yields tensors that own their memory, staying valid after the
+     # context exits or InstantTensor reuses its buffer.
+     with instanttensor.safe_open(
