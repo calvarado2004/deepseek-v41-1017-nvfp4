@@ -89,9 +89,9 @@ On one prompt, 6 runs each: 5/6 loops at temperature 0.6, 3/6 with DSpark off
 override server defaults (Qwen Code's DeepSeek provider sends 0), so the
 middleware forces 1.0/1.0 on every request and adds a thinking budget when a
 thinking request sends none: low 4,096 · high 8,192 · xhigh 16,384 · max
-65,536 · unnamed 6,144 (`DSV41_THINKING_BUDGET`). A client's own
+131,072 · unnamed 6,144 (`DSV41_THINKING_BUDGET`). A client's own
 `thinking_token_budget` wins. Give max effort a large `max_tokens` (we use
-131,072).
+196,608, which leaves 64K for the answer after a full budget).
 
 ## Quick start
 

@@ -14,7 +14,7 @@ bounded only by a budget (deepseek-recipe#24). The cap follows the effort.
     DSV41_FORCE_SAMPLING  1 (default) enforces; 0 passes bodies unchanged
     DSV41_TEMPERATURE     1.0
     DSV41_TOP_P           1.0
-    DSV41_THINKING_BUDGET low:4096,high:8192,xhigh:16384,max:65536,default:6144
+    DSV41_THINKING_BUDGET low:4096,high:8192,xhigh:16384,max:131072,default:6144
                           (empty: no budget is added)
 
 Load with: --middleware dsv41_sampling_policy.SamplingPolicyMiddleware
@@ -30,7 +30,7 @@ FORCE = os.environ.get("DSV41_FORCE_SAMPLING", "1") == "1"
 TEMPERATURE = float(os.environ.get("DSV41_TEMPERATURE", "1.0"))
 TOP_P = float(os.environ.get("DSV41_TOP_P", "1.0"))
 _BUDGET_SPEC = os.environ.get(
-    "DSV41_THINKING_BUDGET", "low:4096,high:8192,xhigh:16384,max:65536,default:6144"
+    "DSV41_THINKING_BUDGET", "low:4096,high:8192,xhigh:16384,max:131072,default:6144"
 )
 BUDGET = {k.strip(): int(v) for k, v in
           (item.split(":", 1) for item in _BUDGET_SPEC.split(",") if ":" in item)}
